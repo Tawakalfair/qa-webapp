@@ -1,0 +1,37 @@
+{% if run.status in ['PENDING', 'RUNNING'] %}
+    <div hx-get="/run-status/{{ run.id }}" 
+         hx-trigger="every 1.5s" 
+         hx-swap="outerHTML" 
+         class="p-4 rounded-xl border bg-amber-50 text-amber-800 animate-pulse mt-4">
+        <strong>⚙️ Status: {{ run.status }}</strong> - Sedang mengeksekusi mesin Playwright...
+    </div>
+
+{% elif run.status == 'SUCCESS' %}
+    <div class="p-4 rounded-xl border bg-green-50 text-green-800 mt-4 mb-4">
+        <strong>✅ LULUS!</strong> Pengujian selesai tanpa kendala.
+    </div>
+    {% if run.video_url %}
+    <div class="bg-slate-950 p-4 rounded-2xl shadow-inner">
+        <h4 class="text-xs font-bold text-slate-400 uppercase tracking-wider mb-2">Rekaman Pengujian (.mp4):</h4>
+        <video controls autoplay muted playsinline class="w-full rounded-xl border border-slate-800">
+            <source src="{{ run.video_url }}" type="video/mp4">
+            Browser Anda tidak mendukung pemutar video HTML5.
+        </video>
+    </div>
+    {% endif %}
+
+{% else %}
+    <div class="p-4 rounded-xl border bg-red-50 text-red-800 mt-4 mb-4">
+        <strong>❌ GAGAL:</strong> Skenario terhenti.
+        <pre class="mt-2 text-xs font-mono bg-white/50 p-2 rounded overflow-auto">{{ run.error_log }}</pre>
+    </div>
+    {% if run.video_url %}
+    <div class="bg-slate-950 p-4 rounded-2xl shadow-inner">
+        <h4 class="text-xs font-bold text-slate-400 uppercase tracking-wider mb-2">Rekaman Pengujian (.mp4):</h4>
+        <video controls muted playsinline class="w-full rounded-xl border border-slate-800">
+            <source src="{{ run.video_url }}" type="video/mp4">
+            Browser Anda tidak mendukung pemutar video HTML5.
+        </video>
+    </div>
+    {% endif %}
+{% endif %}

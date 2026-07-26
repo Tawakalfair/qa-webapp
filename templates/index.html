@@ -1,0 +1,72 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{ title }}</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/htmx.org@1.9.10"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <style>body { font-family: 'Plus Jakarta Sans', sans-serif; }</style>
+</head>
+<body class="bg-slate-50 min-h-screen text-slate-800">
+    <div class="max-w-7xl mx-auto px-4 py-8">
+        
+        <header class="flex flex-col md:flex-row justify-between items-start md:items-center mb-8 border-b border-slate-200 pb-6 gap-4">
+            <div>
+                <h1 class="text-3xl font-extrabold text-slate-900 tracking-tight">QA Automata</h1>
+                <p class="text-slate-500 mt-1">Platform Visual Regression & Web Automation berbasis Playwright & HTMX</p>
+            </div>
+
+            <nav class="flex items-center gap-2 bg-slate-200/70 p-1.5 rounded-xl border border-slate-200">
+                <a href="/" class="px-4 py-2 rounded-lg font-bold text-sm bg-white text-blue-600 shadow-sm">
+                    📋 Skenario Tes
+                </a>
+                <a href="/commands" class="px-4 py-2 rounded-lg font-semibold text-sm text-slate-600 hover:text-slate-900 transition-colors">
+                    ⚙️ Katalog Perintah
+                </a>
+            </nav>
+        </header>
+
+        <div class="grid grid-cols-1 lg:grid-cols-12 gap-8">
+            <div class="lg:col-span-5 space-y-8">
+                <div class="bg-white p-6 rounded-2xl shadow-sm border border-slate-200/80">
+                    <h2 class="text-lg font-bold text-slate-900 mb-4">＋ Buat Skenario Tes Baru</h2>
+                    <form action="/testcase/new" method="POST" class="space-y-4">
+                        <input type="text" name="name" required placeholder="Nama Skenario" class="w-full px-4 py-2 rounded-xl border">
+                        <input type="url" name="base_url" required placeholder="Base URL (http://...)" class="w-full px-4 py-2 rounded-xl border">
+                        <button type="submit" class="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 rounded-xl shadow-sm">Simpan Skenario</button>
+                    </form>
+                </div>
+
+                <div class="space-y-4">
+                    <h2 class="text-sm font-bold text-slate-400 uppercase tracking-wider">Daftar Skenario Terdaftar</h2>
+                    {% for case in test_cases %}
+                    <div hx-get="/testcase/{{ case.id }}" 
+                         hx-target="#right-panel"
+                         class="bg-white p-5 rounded-2xl shadow-sm border hover:border-blue-400 cursor-pointer mb-4 group transition-all">
+                        <div class="flex justify-between items-start">
+                            <div>
+                                <h3 class="font-bold text-slate-900 group-hover:text-blue-600">{{ case.name }}</h3>
+                                <p class="text-xs text-blue-600 font-mono mt-1">{{ case.base_url }}</p>
+                            </div>
+                            <form action="/testcase/{{ case.id }}/delete" method="POST" onsubmit="return confirm('Hapus skenario ini?');">
+                                <button type="submit" class="text-slate-300 hover:text-red-500 text-sm">🗑</button>
+                            </form>
+                        </div>
+                    </div>
+                    {% endfor %}
+                </div>
+            </div>
+
+            <div class="lg:col-span-7" id="right-panel">
+                <div class="bg-slate-100/50 border-2 border-dashed border-slate-200 rounded-2xl p-10 text-center h-[500px] flex flex-col justify-center items-center">
+                    <span class="text-4xl mb-4">👈</span>
+                    <h3 class="font-bold text-slate-700 text-lg">Pilih Skenario Terlebih Dahulu</h3>
+                </div>
+            </div>
+
+        </div>
+    </div>
+</body>
+</html>

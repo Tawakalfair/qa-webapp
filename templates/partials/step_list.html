@@ -1,0 +1,82 @@
+<!-- Tabel Alur Pengujian Skenario dengan Styling Tailwind & HTMX Native -->
+{% if not case.steps %}
+    <div class="p-8 text-center bg-slate-50 rounded-xl border border-dashed border-slate-200">
+        <p class="text-slate-400 text-sm">Belum ada langkah instruksi. Silakan tambahkan langkah baru pada formulir di atas!</p>
+    </div>
+{% else %}
+    <div class="overflow-x-auto rounded-xl border border-slate-200 shadow-sm">
+        <table class="w-full text-left text-sm text-slate-600">
+            <thead class="bg-slate-100/80 text-xs font-bold uppercase tracking-wider text-slate-500 border-b border-slate-200">
+                <tr>
+                    <th scope="col" class="px-4 py-3 text-center w-16">#</th>
+                    <th scope="col" class="px-4 py-3">Perintah</th>
+                    <th scope="col" class="px-4 py-3">Target Selector</th>
+                    <th scope="col" class="px-4 py-3">Nilai / Value</th>
+                    <th scope="col" class="px-4 py-3 text-center w-20">Aksi</th>
+                </tr>
+            </thead>
+            <tbody class="divide-y divide-slate-100 bg-white">
+                {% for step in case.steps|sort(attribute='step_order') %}
+                <tr class="hover:bg-slate-50/80 transition-colors">
+                    <!-- Urutan -->
+                    <td class="px-4 py-3 font-extrabold text-slate-700 text-center">
+                        <span class="inline-flex items-center justify-center w-6 h-6 rounded-full bg-slate-100 text-slate-700 text-xs font-bold border border-slate-200">
+                            {{ step.step_order }}
+                        </span>
+                    </td>
+                    
+                    <!-- Perintah dengan Warna Badge khusus -->
+                    <td class="px-4 py-3 font-semibold">
+                        {% if step.command == 'GOTO_URL' %}
+                            <span class="px-2.5 py-1 rounded-lg text-xs font-extrabold bg-blue-50 text-blue-700 border border-blue-200/60 inline-block">🌐 {{ step.command }}</span>
+                        {% elif step.command == 'CLICK' %}
+                            <span class="px-2.5 py-1 rounded-lg text-xs font-extrabold bg-emerald-50 text-emerald-700 border border-emerald-200/60 inline-block">👆 {{ step.command }}</span>
+                        {% elif step.command == 'TYPE_TEXT' %}
+                            <span class="px-2.5 py-1 rounded-lg text-xs font-extrabold bg-purple-50 text-purple-700 border border-purple-200/60 inline-block">⌨️ {{ step.command }}</span>
+                        {% elif step.command == 'WAIT' %}
+                            <span class="px-2.5 py-1 rounded-lg text-xs font-extrabold bg-amber-50 text-amber-700 border border-amber-200/60 inline-block">⏳ {{ step.command }}</span>
+                        {% elif step.command == 'VERIFY_TEXT' %}
+                            <span class="px-2.5 py-1 rounded-lg text-xs font-extrabold bg-indigo-50 text-indigo-700 border border-indigo-200/60 inline-block">🔍 {{ step.command }}</span>
+                        {% else %}
+                            <span class="px-2.5 py-1 rounded-lg text-xs font-extrabold bg-slate-100 text-slate-700 border border-slate-200 inline-block">⚡ {{ step.command }}</span>
+                        {% endif %}
+                    </td>
+                    
+                    <!-- Target Selector -->
+                    <td class="px-4 py-3 font-mono text-xs">
+                        {% if step.target_selector %}
+                            <span class="bg-slate-100 text-slate-800 px-2 py-1 rounded border border-slate-200 font-bold select-all">
+                                {{ step.target_selector }}
+                            </span>
+                        {% else %}
+                            <span class="text-slate-300 italic">-</span>
+                        {% endif %}
+                    </td>
+                    
+                    <!-- Nilai Input -->
+                    <td class="px-4 py-3 text-slate-700">
+                        {% if step.input_value %}
+                            <span class="font-medium text-slate-900 bg-slate-50 px-2 py-0.5 rounded border border-slate-100">
+                                "{{ step.input_value }}"
+                            </span>
+                        {% else %}
+                            <span class="text-slate-300 italic">-</span>
+                        {% endif %}
+                    </td>
+                    
+                    <!-- Aksi Hapus (HTMX) -->
+                    <td class="px-4 py-3 text-center">
+                        <button hx-delete="/testcase/{{ case.id }}/step/{{ step.id }}" 
+                                hx-target="#steps-list-container"
+                                hx-confirm="Yakin ingin menghapus langkah #{{ step.step_order }} ({{ step.command }}) ini?"
+                                class="inline-flex items-center justify-center w-8 h-8 rounded-lg text-slate-400 hover:text-red-600 hover:bg-red-50 transition-all border border-transparent hover:border-red-200"
+                                title="Hapus Langkah Ini">
+                            🗑️
+                        </button>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+{% endif %}
