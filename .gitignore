@@ -11,3 +11,5 @@ static/videos/.mp4
 .DS_Store
 .vscode/
 .idea/
+static/screenshots/*.png
+!static/screenshots/.gitkeep
