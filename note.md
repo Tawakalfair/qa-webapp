@@ -10,9 +10,11 @@ Setiap kali baru membuka komputer/terminal, jalankan urutan berikut:
 cd /path/ke/qa_webapp
 
 # 2. Aktifkan Virtual Environment Python 3.12 (Linux/macOS)
+uv venv
 source .venv/bin/activate
 pip install requirements.txt / uv pip install requirements.txt
 playwright install chromium
+python init_db.py
 
 # 3. Pastikan FFmpeg terinstal di sistem OS
 # Ubuntu/Debian: sudo apt install -y ffmpeg

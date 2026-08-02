@@ -1,22 +1,25 @@
+import os
+import time
 import asyncio
 import urllib.parse
 from playwright.async_api import Page
 from app.models import TestStep, TestCase
 
-# Registry Dictionary untuk menyimpan pasangan "NAMA_COMMAND": fungsi_handler
+# Registry Dictionary untuk memetakan "KODE_PERINTAH": fungsi_handler
 COMMAND_REGISTRY = {}
 
 def register(code: str):
-    """Decorator untuk mendaftarkan fungsi perintah ke registry secara otomatis"""
+    """Decorator untuk mendaftarkan handler perintah secara otomatis ke registry."""
     def decorator(func):
         COMMAND_REGISTRY[code.upper()] = func
         return func
     return decorator
 
-# ===================================================
-# DAFTAR HANDLER PERINTAH PLAYWRIGHT (MODULAR)
-# ===================================================
+# ==============================================================================
+# DAFTAR HANDLER PERINTAH PLAYWRIGHT
+# ==============================================================================
 
+# 1. Navigasi
 @register("GOTO_URL")
 async def handle_goto(page: Page, step: TestStep, test_case: TestCase):
     val = step.input_value
@@ -28,6 +31,7 @@ async def handle_goto(page: Page, step: TestStep, test_case: TestCase):
         url = urllib.parse.urljoin(test_case.base_url, val)
     await page.goto(url)
 
+# 2. Aksi Klik Mouse
 @register("CLICK")
 async def handle_click(page: Page, step: TestStep, test_case: TestCase):
     await page.wait_for_selector(step.target_selector, timeout=5000)
@@ -43,25 +47,65 @@ async def handle_right_click(page: Page, step: TestStep, test_case: TestCase):
     await page.wait_for_selector(step.target_selector, timeout=5000)
     await page.click(step.target_selector, button="right")
 
+@register("HOVER")
+async def handle_hover(page: Page, step: TestStep, test_case: TestCase):
+    await page.wait_for_selector(step.target_selector, timeout=5000)
+    await page.hover(step.target_selector)
+
+# 3. Input Formulir Teks & Keyboard
 @register("TYPE_TEXT")
 async def handle_type(page: Page, step: TestStep, test_case: TestCase):
     await page.wait_for_selector(step.target_selector, timeout=5000)
     await page.fill(step.target_selector, step.input_value or "")
+
+@register("CLEAR_TEXT")
+async def handle_clear(page: Page, step: TestStep, test_case: TestCase):
+    await page.wait_for_selector(step.target_selector, timeout=5000)
+    await page.fill(step.target_selector, "")
 
 @register("PRESS_KEY")
 async def handle_press_key(page: Page, step: TestStep, test_case: TestCase):
     await page.wait_for_selector(step.target_selector, timeout=5000)
     await page.press(step.target_selector, step.input_value or "Enter")
 
-@register("HOVER")
-async def handle_hover(page: Page, step: TestStep, test_case: TestCase):
-    await page.wait_for_selector(step.target_selector, timeout=5000)
-    await page.hover(step.target_selector)
-
+# 4. Elemen Dropdown, Checkbox & Radio
 @register("SELECT_OPTION")
 async def handle_select(page: Page, step: TestStep, test_case: TestCase):
     await page.wait_for_selector(step.target_selector, timeout=5000)
     await page.select_option(step.target_selector, label=step.input_value)
+
+@register("CHECK")
+async def handle_check(page: Page, step: TestStep, test_case: TestCase):
+    await page.wait_for_selector(step.target_selector, timeout=5000)
+    await page.check(step.target_selector)
+
+@register("UNCHECK")
+async def handle_uncheck(page: Page, step: TestStep, test_case: TestCase):
+    await page.wait_for_selector(step.target_selector, timeout=5000)
+    await page.uncheck(step.target_selector)
+
+# 5. Pengguliran (Scrolling)
+@register("SCROLL_DOWN")
+async def handle_scroll_down(page: Page, step: TestStep, test_case: TestCase):
+    val = step.input_value
+    target = step.target_selector
+    px = int(val) if val and val.replace("-", "").isdigit() else 300
+    if target:
+        await page.wait_for_selector(target, timeout=5000)
+        await page.locator(target).evaluate("(el, y) => el.scrollBy(0, y)", px)
+    else:
+        await page.evaluate("(y) => window.scrollBy(0, y)", px)
+
+@register("SCROLL_UP")
+async def handle_scroll_up(page: Page, step: TestStep, test_case: TestCase):
+    val = step.input_value
+    target = step.target_selector
+    px = int(val) if val and val.replace("-", "").isdigit() else 300
+    if target:
+        await page.wait_for_selector(target, timeout=5000)
+        await page.locator(target).evaluate("(el, y) => el.scrollBy(0, -y)", px)
+    else:
+        await page.evaluate("(y) => window.scrollBy(0, -y)", px)
 
 @register("SCROLL_RIGHT")
 async def handle_scroll_right(page: Page, step: TestStep, test_case: TestCase):
@@ -74,26 +118,48 @@ async def handle_scroll_right(page: Page, step: TestStep, test_case: TestCase):
     else:
         await page.evaluate("(x) => window.scrollBy(x, 0)", px)
 
-@register("SCROLL_DOWN")
-async def handle_scroll_down(page: Page, step: TestStep, test_case: TestCase):
-    val = step.input_value
-    target = step.target_selector
-    px = int(val) if val and val.replace("-", "").isdigit() else 300
-    if target:
-        await page.wait_for_selector(target, timeout=5000)
-        await page.locator(target).evaluate("(el, y) => el.scrollBy(0, y)", px)
+# 6. Tangkap Layar (Screenshot Full Page)
+@register("TAKE_SCREENSHOT_FULL")
+async def handle_screenshot_full(page: Page, step: TestStep, test_case: TestCase):
+    """
+    Mengambil screenshot layar penuh (dari paling atas hingga bawah halaman).
+    Disimpan secara otomatis ke direktori static/screenshots/
+    """
+    screenshot_dir = "static/screenshots"
+    os.makedirs(screenshot_dir, exist_ok=True)
+    
+    # Menentukan nama berkas gambar
+    if step.input_value and step.input_value.strip():
+        filename = step.input_value.strip()
+        if not filename.endswith(".png"):
+            filename += ".png"
     else:
-        await page.evaluate("(y) => window.scrollBy(0, y)", px)
+        timestamp = int(time.time())
+        filename = f"screenshot_case_{test_case.id}_step_{step.step_order}_{timestamp}.png"
 
+    filepath = os.path.join(screenshot_dir, filename)
+    await page.screenshot(path=filepath, full_page=True)
+    print(f"📸 Screenshot Full Page tersimpan di: {filepath}")
+
+# 7. Waktu & Tunggu
 @register("WAIT")
 async def handle_wait(page: Page, step: TestStep, test_case: TestCase):
     delay = float(step.input_value) if step.input_value else 2.0
     await asyncio.sleep(delay)
 
+@register("WAIT_FOR_SELECTOR")
+async def handle_wait_selector(page: Page, step: TestStep, test_case: TestCase):
+    await page.wait_for_selector(step.target_selector, timeout=10000)
+
+# 8. Verifikasi & Assertions
 @register("VERIFY_TEXT")
 async def handle_verify_text(page: Page, step: TestStep, test_case: TestCase):
     await page.wait_for_selector(step.target_selector, timeout=5000)
     content = await page.inner_text(step.target_selector)
     val = step.input_value or ""
     if val not in content:
-        raise AssertionError(f"Teks '{val}' tidak ditemukan pada selector '{step.target_selector}'. Teks aktual: '{content}'")
+        raise AssertionError(f"Teks '{val}' tidak ditemukan pada '{step.target_selector}'. Teks aktual: '{content}'")
+
+@register("VERIFY_ELEMENT_VISIBLE")
+async def handle_verify_visible(page: Page, step: TestStep, test_case: TestCase):
+    await page.wait_for_selector(step.target_selector, state="visible", timeout=5000)

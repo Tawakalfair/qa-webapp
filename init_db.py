@@ -1,19 +1,21 @@
 import asyncio
-from app.database import engine, Base
-# mengimpor file models agar SQLAlchemy membaca struktur tabelnya
-from app import models 
+from app.database import engine, Base, SessionLocal
+from app.seeders import seed_commands
 
-async def init_models():
+async def init_db():
     """
-    Fungsi ini bertugas membuat file qa_database.db 
-    dan merancang tabel di dalamnya sesuai dengan definisi di models.py
+    Script utama untuk inisialisasi tabel database dan pemanggilan seeder modular.
     """
+    print("🔄 Membangun struktur tabel database SQLite...")
     async with engine.begin() as conn:
-        print("Membangun struktur database SQLite...")
-        # Perintah ini akan mengecek apakah tabel sudah ada, jika belum ia akan membuatnya.
         await conn.run_sync(Base.metadata.create_all)
-        print("Tabel berhasil dibuat!")
+    print("✅ Tabel database berhasil diperbarui/dibuat!")
+
+    print("\n🌱 Menjalankan Seeder Data Master...")
+    async with SessionLocal() as db:
+        await seed_commands(db)
+
+    print("\n🎉 Proses inisialisasi database dan seeding selesai sempurna!")
 
 if __name__ == "__main__":
-    # Menjalankan fungsi asynchronous di atas
-    asyncio.run(init_models())
+    asyncio.run(init_db())
