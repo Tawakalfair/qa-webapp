@@ -1,7 +1,9 @@
 import asyncio
+import concurrent.futures
 import os
 import shutil
 import subprocess
+import sys
 from sqlalchemy import select
 from sqlalchemy.orm import selectinload
 from playwright.async_api import async_playwright
@@ -16,27 +18,28 @@ os.makedirs(VIDEO_DIR, exist_ok=True)
 def convert_webm_to_mp4(input_path: str, output_path: str) -> bool:
     """
     Mengonversi WebM mentah Playwright menjadi MP4 (H.264) + FastStart
-    agar dapat diputar secara mulus di seluruh web browser HTML5.
     """
     try:
         cmd = [
             "ffmpeg",
-            "-y",                      # Overwrite jika file sudah ada
-            "-i", input_path,          # Input file webm mentah
-            "-c:v", "libx264",         # Codec H.264 universal
-            "-pix_fmt", "yuv420p",     # Format piksel kompatibel HTML5
-            "-preset", "ultrafast",    # Konversi super cepat
-            "-movflags", "+faststart", # Pindahkan metadata ke depan agar instan dimuat
+            "-y",
+            "-i", input_path,
+            "-c:v", "libx264",
+            "-pix_fmt", "yuv420p",
+            "-preset", "ultrafast",
+            "-movflags", "+faststart",
             output_path
         ]
-        # Jalankan proses FFmpeg
         subprocess.run(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, check=True)
         return True
     except Exception as e:
         print(f"Warning/Error FFmpeg: {e}")
         return False
 
-async def run_test_scenario(run_id: str, test_case_id: int):
+async def _async_run_test_scenario(run_id: str, test_case_id: int):
+    """
+    Logika utama eksekusi skenario Playwright.
+    """
     print(f"[RUN-{run_id}] Menghubungkan ke database...")
     
     async with SessionLocal() as db:
@@ -91,7 +94,6 @@ async def run_test_scenario(run_id: str, test_case_id: int):
             finally:
                 video_obj = page.video
 
-                # Tutup browser agar file WebM selesai ditulis
                 await page.close()
                 await context.close()
                 await browser.close()
@@ -104,16 +106,13 @@ async def run_test_scenario(run_id: str, test_case_id: int):
                             mp4_filename = f"{run_id}.mp4"
                             final_mp4_path = os.path.join(VIDEO_DIR, mp4_filename)
 
-                            # Konversi WebM mentah menjadi MP4 via FFmpeg
                             success = convert_webm_to_mp4(raw_webm_path, final_mp4_path)
                             
                             if success and os.path.exists(final_mp4_path):
                                 final_video_url = f"/static/videos/{mp4_filename}"
-                                # Hapus file webm mentah asli agar hemat ruang penyimpanan
                                 if os.path.exists(raw_webm_path):
                                     os.remove(raw_webm_path)
                             else:
-                                # Fallback jika FFmpeg gagal
                                 fallback_path = os.path.join(VIDEO_DIR, f"{run_id}.webm")
                                 shutil.move(raw_webm_path, fallback_path)
                                 final_video_url = f"/static/videos/{run_id}.webm"
@@ -127,3 +126,30 @@ async def run_test_scenario(run_id: str, test_case_id: int):
                     test_run.error_log = error_log
                     await db.commit()
                     print(f"[RUN-{run_id}] Eksekusi selesai. Status: {status} | Video: {final_video_url}")
+
+def _run_in_isolated_thread(run_id: str, test_case_id: int):
+    """
+    Menjalankan Event Loop Proactor tersendiri di dalam thread terpisah (Khusus Windows).
+    """
+    if sys.platform == "win32":
+        asyncio.set_event_loop_policy(asyncio.WindowsProactorEventLoopPolicy())
+    
+    new_loop = asyncio.new_event_loop()
+    asyncio.set_event_loop(new_loop)
+    try:
+        new_loop.run_until_complete(_async_run_test_scenario(run_id, test_case_id))
+    finally:
+        new_loop.close()
+
+async def run_test_scenario(run_id: str, test_case_id: int):
+    """
+    Entrypoint utama yang dipanggil oleh FastAPI BackgroundTasks.
+    """
+    if sys.platform == "win32":
+        loop = asyncio.get_running_loop()
+        with concurrent.futures.ThreadPoolExecutor() as pool:
+            await loop.run_in_executor(
+                pool, _run_in_isolated_thread, run_id, test_case_id
+            )
+    else:
+        await _async_run_test_scenario(run_id, test_case_id)

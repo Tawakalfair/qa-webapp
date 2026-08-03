@@ -1,5 +1,7 @@
 import uuid
 import os
+import sys
+import asyncio
 from fastapi import FastAPI, Request, BackgroundTasks, Depends, Form, HTTPException, status
 from fastapi.templating import Jinja2Templates
 from fastapi.staticfiles import StaticFiles
@@ -8,6 +10,10 @@ from sqlalchemy import select
 from sqlalchemy.orm import selectinload
 from sqlalchemy.ext.asyncio import AsyncSession
 from typing import Optional
+
+# FIX KHUSUS WINDOWS: Paksa asyncio menggunakan ProactorEventLoop agar Playwright subprocess dapat berjalan
+if sys.platform == "win32":
+    asyncio.set_event_loop_policy(asyncio.WindowsProactorEventLoopPolicy())
 
 from app.database import get_db
 from app.models import TestCase, TestStep, TestRun, CommandDefinition
@@ -28,7 +34,6 @@ VIDEO_DIR = "static/videos"
 async def stream_video(video_name: str, request: Request):
     """
     Endpoint khusus pemutaran video dengan dukungan HTTP 206 Partial Content (Range Requests).
-    Diperlukan oleh browser Chromium (Chrome/Brave/Edge) untuk membaca metadata WebM Playwright.
     """
     video_path = os.path.join(VIDEO_DIR, video_name)
     if not os.path.exists(video_path):
@@ -37,7 +42,6 @@ async def stream_video(video_name: str, request: Request):
     file_size = os.path.getsize(video_path)
     range_header = request.headers.get("range")
 
-    # Jika browser tidak meminta Range, kirimkan file biasa
     if not range_header:
         def iterfile():
             with open(video_path, mode="rb") as f:
@@ -48,7 +52,6 @@ async def stream_video(video_name: str, request: Request):
             headers={"Accept-Ranges": "bytes", "Content-Length": str(file_size)}
         )
 
-    # Parsing header Range (contoh: bytes=0-)
     try:
         unit, range_spec = range_header.split("=")
         if unit.strip() != "bytes":
@@ -69,7 +72,7 @@ async def stream_video(video_name: str, request: Request):
             f.seek(start)
             bytes_read = 0
             while bytes_read < chunk_size:
-                read_size = min(1024 * 1024, chunk_size - bytes_read) # Potongan 1MB
+                read_size = min(1024 * 1024, chunk_size - bytes_read)
                 data = f.read(read_size)
                 if not data:
                     break
@@ -89,18 +92,19 @@ async def stream_video(video_name: str, request: Request):
         media_type="video/webm"
     )
 
-# --- 1. RUTE HALAMAN UTAMA ---
+
+# ==========================================
+# 1. RUTE DASHBOARD SKENARIO (UTAMA)
+# ==========================================
+
 @app.get("/")
 async def render_dashboard(request: Request, db: AsyncSession = Depends(get_db)):
     result = await db.execute(select(TestCase).order_by(TestCase.id.desc()))
     test_cases = result.scalars().all()
-    # Ini merender struktur HTML utuh (kiri kosong, kanan kosong)
     return templates.TemplateResponse("index.html", {
-        "request": request, "title": "QA Automata", "test_cases": test_cases
+        "request": request, "title": "QA Automata - Skenario", "test_cases": test_cases
     })
 
-
-# --- 2. RUTE MENGEMBALIKAN FRAGMEN KANAN (HTMX hx-get) ---
 @app.get("/testcase/{case_id}")
 async def get_test_case_panel(case_id: int, request: Request, db: AsyncSession = Depends(get_db)):
     result = await db.execute(
@@ -108,15 +112,13 @@ async def get_test_case_panel(case_id: int, request: Request, db: AsyncSession =
     )
     test_case = result.scalar_one_or_none()
     
-    cmd_result = await db.execute(select(CommandDefinition).order_by(CommandDefinition.id.asc()))
+    cmd_result = await db.execute(select(CommandDefinition).order_by(CommandDefinition.code.asc()))
     commands = cmd_result.scalars().all()
     
     return templates.TemplateResponse("partials/right_panel.html", {
         "request": request, "case": test_case, "commands": commands
     })
 
-
-# --- 3. RUTE TAMBAH SKENARIO ---
 @app.post("/testcase/new")
 async def create_test_case(name: str = Form(...), base_url: str = Form(...), db: AsyncSession = Depends(get_db)):
     new_case = TestCase(name=name, base_url=base_url)
@@ -124,8 +126,6 @@ async def create_test_case(name: str = Form(...), base_url: str = Form(...), db:
     await db.commit()
     return RedirectResponse(url="/", status_code=303)
 
-
-# --- 4. RUTE TAMBAH LANGKAH (HTMX hx-post) ---
 @app.post("/testcase/{case_id}/step")
 async def add_test_step(
     case_id: int,
@@ -139,23 +139,22 @@ async def add_test_step(
     existing_steps = result.scalars().all()
     
     new_step = TestStep(
-        test_case_id=case_id, step_order=len(existing_steps) + 1,
-        command=command, target_selector=target_selector, input_value=input_value
+        test_case_id=case_id, 
+        step_order=len(existing_steps) + 1,
+        command=command, 
+        target_selector=target_selector, 
+        input_value=input_value
     )
     db.add(new_step)
     await db.commit()
 
-    # Ambil ulang data case beserta steps yang baru diupdate
     result_case = await db.execute(
         select(TestCase).where(TestCase.id == case_id).options(selectinload(TestCase.steps))
     )
     test_case = result_case.scalar_one()
 
-    # HTMX hanya perlu merender ulang serpihan daftar langkahnya saja
     return templates.TemplateResponse("partials/step_list.html", {"request": request, "case": test_case})
 
-
-# --- 5. RUTE MENJALANKAN TES (HTMX hx-post) ---
 @app.post("/testcase/{case_id}/run")
 async def run_test(case_id: int, request: Request, background_tasks: BackgroundTasks, db: AsyncSession = Depends(get_db)):
     run_id = f"RUN-{str(uuid.uuid4())[:8].upper()}"
@@ -163,22 +162,14 @@ async def run_test(case_id: int, request: Request, background_tasks: BackgroundT
     db.add(new_run)
     await db.commit()
 
-    # Lempar ke background agar web tidak loading lama
     background_tasks.add_task(run_test_scenario, run_id, case_id)
-
-    # Mengembalikan UI Polling Awal
     return templates.TemplateResponse("partials/status.html", {"request": request, "run": new_run})
 
-
-# --- 6. RUTE POLLING STATUS HTMX (hx-get) ---
 @app.get("/run-status/{run_id}")
 async def get_run_status(run_id: str, request: Request, db: AsyncSession = Depends(get_db)):
     result = await db.execute(select(TestRun).where(TestRun.id == run_id))
     test_run = result.scalar_one()
-    
-    # Akan mengevaluasi logika if/else di status.html untuk berhenti polling
     return templates.TemplateResponse("partials/status.html", {"request": request, "run": test_run})
-
 
 @app.post("/testcase/{case_id}/delete")
 async def delete_test_case(case_id: int, db: AsyncSession = Depends(get_db)):
@@ -191,9 +182,6 @@ async def delete_test_case(case_id: int, db: AsyncSession = Depends(get_db)):
 
 @app.delete("/testcase/{case_id}/step/{step_id}")
 async def delete_test_step(case_id: int, step_id: int, request: Request, db: AsyncSession = Depends(get_db)):
-    """
-    Menghapus langkah tertentu dari skenario dan merapikan nomor urut langkah tersisa.
-    """
     result = await db.execute(
         select(TestStep).where(TestStep.id == step_id, TestStep.test_case_id == case_id)
     )
@@ -203,7 +191,6 @@ async def delete_test_step(case_id: int, step_id: int, request: Request, db: Asy
         await db.delete(step)
         await db.commit()
 
-        # Rapikan ulang step_order dari langkah-langkah yang tersisa
         remaining_result = await db.execute(
             select(TestStep)
             .where(TestStep.test_case_id == case_id)
@@ -223,13 +210,13 @@ async def delete_test_step(case_id: int, step_id: int, request: Request, db: Asy
 
     return templates.TemplateResponse("partials/step_list.html", {"request": request, "case": test_case})
 
+
 # ==========================================
-# RUTE MANAJEMEN PERINTAH (COMMANDS CRUD)
+# 2. RUTE MANAJEMEN PERINTAH (COMMANDS CRUD)
 # ==========================================
 
 @app.get("/commands")
 async def render_commands_page(request: Request, db: AsyncSession = Depends(get_db)):
-    """Menampilkan Halaman Manajemen Katalog Perintah Playwright"""
     result = await db.execute(select(CommandDefinition).order_by(CommandDefinition.code.asc()))
     commands = result.scalars().all()
     return templates.TemplateResponse("commands.html", {
@@ -248,7 +235,6 @@ async def create_command(
     placeholder_value: Optional[str] = Form(None),
     db: AsyncSession = Depends(get_db)
 ):
-    """Membuat Perintah Playwright Baru"""
     new_cmd = CommandDefinition(
         code=code.upper().strip(),
         label=label.strip(),
@@ -261,14 +247,12 @@ async def create_command(
     db.add(new_cmd)
     await db.commit()
 
-    # Ambil ulang seluruh perintah untuk merender ulang tabel HTMX
     result = await db.execute(select(CommandDefinition).order_by(CommandDefinition.code.asc()))
     commands = result.scalars().all()
     return templates.TemplateResponse("partials/command_table.html", {"request": request, "commands": commands})
 
 @app.get("/commands/{cmd_id}/edit")
 async def get_edit_command_modal(cmd_id: int, request: Request, db: AsyncSession = Depends(get_db)):
-    """Mengembalikan Modal Form Edit Perintah (HTMX)"""
     result = await db.execute(select(CommandDefinition).where(CommandDefinition.id == cmd_id))
     cmd = result.scalar_one_or_none()
     return templates.TemplateResponse("partials/command_edit_modal.html", {"request": request, "cmd": cmd})
@@ -286,7 +270,6 @@ async def update_command(
     placeholder_value: Optional[str] = Form(None),
     db: AsyncSession = Depends(get_db)
 ):
-    """Menyimpan Perubahan Perintah (Edit)"""
     result = await db.execute(select(CommandDefinition).where(CommandDefinition.id == cmd_id))
     cmd = result.scalar_one_or_none()
     
@@ -306,7 +289,6 @@ async def update_command(
 
 @app.delete("/commands/{cmd_id}")
 async def delete_command(cmd_id: int, request: Request, db: AsyncSession = Depends(get_db)):
-    """Menghapus Perintah dari Katalog"""
     result = await db.execute(select(CommandDefinition).where(CommandDefinition.id == cmd_id))
     cmd = result.scalar_one_or_none()
     

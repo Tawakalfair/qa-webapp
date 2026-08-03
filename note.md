@@ -10,6 +10,10 @@ Setiap kali baru membuka komputer/terminal, jalankan urutan berikut:
 cd /path/ke/qa_webapp
 
 # 2. Aktifkan Virtual Environment Python 3.12 (Linux/macOS)
+#optional company setup
+python -m venv .venv --without-pip
+.venv\Scripts\activate
+
 uv venv
 source .venv/bin/activate
 pip install requirements.txt / uv pip install requirements.txt
