@@ -81,24 +81,39 @@ playwright install chromium
 📂 Struktur Berkas Proyek
 
 qa_webapp/
-├── .venv/                      # Virtual environment Python 3.12
 ├── app/
-│   ├── database.py             # Koneksi SQLite + Async SQLAlchemy (expire_on_commit=False)
-│   ├── models.py               # Model Tabel (TestCase, TestStep, TestRun)
-│   ├── engine.py               # Mesin Perekam & Eksekusi Playwright (GOTO_URL, CLICK, TYPE, dll)
-│   └── main.py                 # REST API & Rute HTMX Partial Rendering
+│   ├── api/
+│   │   ├── deps.py                 # Dependency Injection (get_db)
+│   │   └── v1/
+│   │       ├── dashboard.py        # Router Utama (Dashboard Skenario & HTMX)
+│   │       └── media.py            # Router Streaming Video (HTTP 206 Partial)
+│   ├── core/
+│   │   ├── config.py               # Centralized Settings (Pydantic BaseSettings)
+│   │   └── database.py             # Engine & Async Session SQLAlchemy
+│   ├── engine/
+│   │   ├── executor.py             # Playwright Executor (dengan isolasi Thread Windows)
+│   │   └── handlers.py             # Command Handler Pattern (Registry Perintah)
+│   ├── models/
+│   │   └── models.py               # SQLAlchemy ORM Models
+│   ├── schemas/
+│   │   └── schemas.py              # Pydantic Schemas (DTO / Form Validation)
+│   ├── services/
+│   │   └── test_service.py         # Business Logic Layer
+│   ├── seeders.py                  # Database Master Command Seeder
+│   └── main.py                     # Entrypoint Utama FastAPI (Minimalis & Rapi)
 ├── static/
-│   └── videos/                 # Tempat penyimpanan rekaman hasil pengujian (.webm/.mp4)
+│   ├── videos/                     # Output Rekaman (.mp4)
+│   └── screenshots/                # Output Tangkapan Layar (.png)
 ├── templates/
-│   ├── index.html              # Halaman Dashboard Utama
-│   └── partials/               # Serpihan Komponen HTML (HTMX Partials)
-│       ├── right_panel.html    # Panel Detail Skenario & Form Step
-│       ├── step_list.html      # Daftar Urutan Langkah Pengujian
-│       └── status.html         # Indikator Polling Real-time & Pemutar Video
-├── init_db.py                  # Script Pembuat Tabel SQLite
-├── qa_database.db              # Database File SQLite
-├── requirements.txt            # Daftar Dependensi Python
-└── notepad.md                  # Dokumentasi Catatan Proyek
+│   ├── index.html                  # Dashboard Skenario
+│   └── partials/
+│       ├── right_panel.html        # Panel Detail Skenario
+│       ├── step_list.html          # Tabel Urutan Langkah
+│       └── status.html             # Status Polling & Video Player
+├── init_db.py                      # Script Runner Inisialisasi Database
+├── requirements.txt
+├── prd.md
+└── notepad.md
 
 
 💡 Catatan Teknis & Solusi Masalah Krusial

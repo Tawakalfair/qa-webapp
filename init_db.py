@@ -1,5 +1,5 @@
 import asyncio
-from app.database import engine, Base, SessionLocal
+from app.core.database import engine, Base, SessionLocal
 from app.seeders import seed_commands
 
 async def init_db():

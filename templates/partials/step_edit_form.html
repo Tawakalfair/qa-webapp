@@ -1,0 +1,46 @@
+<tr id="step-row-{{ step.id }}" class="bg-blue-50/70 border-b border-blue-200">
+    <td class="px-3 py-3 text-center text-xs font-bold text-blue-600">
+        {{ step.step_order }}
+    </td>
+    <td colspan="4" class="px-3 py-2">
+        <form hx-post="/testcase/{{ case_id }}/step/{{ step.id }}/edit" 
+              hx-target="#step-list-container" 
+              hx-swap="innerHTML" 
+              class="flex items-center gap-2">
+            
+            <!-- Command Dropdown -->
+            <select name="command" required class="px-2.5 py-1.5 border border-slate-300 rounded-lg text-xs font-mono font-semibold text-slate-700 bg-white focus:outline-none focus:border-blue-500">
+                {% for cmd in commands %}
+                <option value="{{ cmd.code }}" {% if cmd.code == step.command %}selected{% endif %}>
+                    {{ cmd.code }}
+                </option>
+                {% endfor %}
+            </select>
+
+            <!-- Target Selector -->
+            <input type="text" name="target_selector" value="{{ step.target_selector or '' }}" 
+                   placeholder="Target Selector (opsional)" 
+                   class="flex-1 px-2.5 py-1.5 border border-slate-300 rounded-lg text-xs font-mono bg-white focus:outline-none focus:border-blue-500 min-w-[130px]">
+
+            <!-- Input Value -->
+            <input type="text" name="input_value" value="{{ step.input_value or '' }}" 
+                   placeholder="Input Value (opsional)" 
+                   class="flex-1 px-2.5 py-1.5 border border-slate-300 rounded-lg text-xs font-mono bg-white focus:outline-none focus:border-blue-500 min-w-[130px]">
+
+            <!-- Action Buttons -->
+            <div class="flex items-center gap-1.5">
+                <button type="submit" title="Simpan Perubahan" class="bg-emerald-600 hover:bg-emerald-700 text-white font-semibold text-xs px-3 py-1.5 rounded-lg shadow-sm transition-colors flex items-center gap-1">
+                    💾 <span>Simpan</span>
+                </button>
+                <button type="button" 
+                        hx-get="/testcase/{{ case_id }}" 
+                        hx-target="#right-panel" 
+                        hx-swap="innerHTML"
+                        title="Batal Edit" 
+                        class="bg-slate-200 hover:bg-slate-300 text-slate-700 font-semibold text-xs px-2.5 py-1.5 rounded-lg transition-colors">
+                    ✕
+                </button>
+            </div>
+        </form>
+    </td>
+</tr>
