@@ -1,120 +1,150 @@
-import asyncio
-import concurrent.futures
 import os
-import shutil
-import subprocess
 import sys
+import asyncio
+from typing import Set
 from sqlalchemy import select
-from sqlalchemy.orm import selectinload
+from sqlalchemy.orm import selectinload, sessionmaker
+from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession
 from playwright.async_api import async_playwright
 
 from app.core.config import settings
-from app.core.database import SessionLocal
 from app.models.models import TestCase, TestStep, TestRun
-from app.engine.handlers import COMMAND_REGISTRY
+from app.engine.handlers import execute_single_command
 
-def convert_webm_to_mp4(input_path: str, output_path: str) -> bool:
-    try:
-        cmd = [
-            "ffmpeg", "-y", "-i", input_path,
-            "-c:v", "libx264", "-pix_fmt", "yuv420p",
-            "-preset", "ultrafast", "-movflags", "+faststart",
-            output_path
-        ]
-        subprocess.run(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, check=True)
-        return True
-    except Exception as e:
-        print(f"Warning FFmpeg: {e}")
-        return False
 
-async def _async_run_test_scenario(run_id: str, test_case_id: int):
-    async with SessionLocal() as db:
-        result = await db.execute(
-            select(TestCase)
-            .where(TestCase.id == test_case_id)
-            .options(selectinload(TestCase.steps))
+async def execute_steps_recursively(
+    db, 
+    page, 
+    case_id: int, 
+    visited_cases: Set[int], 
+    base_url: str
+):
+    if case_id in visited_cases:
+        raise ValueError(
+            f"Terdeteksi Circular Dependency pada INCLUDE_SCENARIO! "
+            f"Skenario ID {case_id} dipanggil berulang kali."
         )
-        test_case = result.scalar_one_or_none()
-        if not test_case:
+
+    current_visited = set(visited_cases)
+    current_visited.add(case_id)
+
+    result = await db.execute(
+        select(TestCase)
+        .where(TestCase.id == case_id)
+        .options(selectinload(TestCase.steps))
+    )
+    test_case = result.scalar_one_or_none()
+    
+    if not test_case:
+        raise ValueError(f"Skenario dengan ID {case_id} tidak ditemukan.")
+
+    sorted_steps = sorted(test_case.steps, key=lambda s: s.step_order)
+
+    for step in sorted_steps:
+        if step.command == "INCLUDE_SCENARIO":
+            if not step.input_value or not step.input_value.strip().isdigit():
+                raise ValueError(
+                    f"Perintah INCLUDE_SCENARIO pada Langkah #{step.step_order} "
+                    f"memerlukan ID Skenario Target yang valid."
+                )
+            
+            target_case_id = int(step.input_value.strip())
+            await execute_steps_recursively(
+                db=db,
+                page=page,
+                case_id=target_case_id,
+                visited_cases=current_visited,
+                base_url=base_url
+            )
+        else:
+            await execute_single_command(page, step, base_url)
+
+
+async def _async_run_test_scenario(run_id: str, case_id: int):
+    # Buat engine lokal khusus untuk thread ini agar terisolasi dari event loop Uvicorn
+    thread_engine = create_async_engine(settings.DATABASE_URL)
+    ThreadSession = sessionmaker(thread_engine, class_=AsyncSession, expire_on_commit=False)
+
+    async with ThreadSession() as db:
+        result_run = await db.execute(select(TestRun).where(TestRun.id == run_id))
+        test_run = result_run.scalar_one()
+        test_run.status = "RUNNING"
+        await db.commit()
+
+        result_case = await db.execute(select(TestCase).where(TestCase.id == case_id))
+        main_case = result_case.scalar_one_or_none()
+
+        if not main_case:
+            test_run.status = "FAILED"
+            test_run.error_log = "Skenario utama tidak ditemukan."
+            await db.commit()
+            await thread_engine.dispose()
             return
 
-        run_result = await db.execute(select(TestRun).where(TestRun.id == run_id))
-        test_run = run_result.scalar_one_or_none()
-        if test_run:
-            test_run.status = "RUNNING"
-            await db.commit()
+        videos_dir = os.path.join("static", "videos")
+        os.makedirs(videos_dir, exist_ok=True)
 
-        steps = sorted(test_case.steps, key=lambda s: s.step_order)
+        video_file_name = f"{run_id}.mp4"
+        relative_video_path = f"/static/videos/{video_file_name}"
 
-        async with async_playwright() as p:
-            browser = await p.chromium.launch(headless=True)
-            context = await browser.new_context(
-                record_video_dir=settings.VIDEO_DIR,
-                record_video_size={"width": 1280, "height": 720}
-            )
-            page = await context.new_page()
-            status = "SUCCESS"
-            error_log = None
-
-            try:
-                for step in steps:
-                    cmd = step.command.upper()
-                    handler_func = COMMAND_REGISTRY.get(cmd)
-                    if handler_func:
-                        await handler_func(page, step, test_case)
-
-                await asyncio.sleep(1)
-
-            except Exception as e:
-                status = "FAILED"
-                error_log = str(e)
+        try:
+            async with async_playwright() as p:
+                browser = await p.chromium.launch(headless=True)
+                context = await browser.new_context(
+                    record_video_dir=videos_dir,
+                    record_video_size={"width": 1280, "height": 720},
+                    viewport={"width": 1280, "height": 720}
+                )
                 
-            finally:
-                video_obj = page.video
-                await page.close()
+                # Bawaan timeoutPlaywright (15 detik)
+                context.set_default_timeout(15000)
+                context.set_default_navigation_timeout(15000)
+
+                page = await context.new_page()
+
+                # Batasi total durasi eksekusi seluruh skenario maksimal 60 detik
+                await asyncio.wait_for(
+                    execute_steps_recursively(
+                        db=db,
+                        page=page,
+                        case_id=case_id,
+                        visited_cases=set(),
+                        base_url=main_case.base_url
+                    ),
+                    timeout=60.0
+                )
+
                 await context.close()
                 await browser.close()
 
-                final_video_url = None
-                if video_obj:
-                    try:
-                        raw_webm_path = await video_obj.path()
-                        if raw_webm_path and os.path.exists(raw_webm_path):
-                            mp4_filename = f"{run_id}.mp4"
-                            final_mp4_path = os.path.join(settings.VIDEO_DIR, mp4_filename)
+                original_video_path = await page.video.path() if page.video else None
+                target_video_path = os.path.join(videos_dir, video_file_name)
+                
+                if original_video_path and os.path.exists(original_video_path):
+                    if os.path.exists(target_video_path):
+                        os.remove(target_video_path)
+                    os.rename(original_video_path, target_video_path)
 
-                            success = convert_webm_to_mp4(raw_webm_path, final_mp4_path)
-                            if success and os.path.exists(final_mp4_path):
-                                final_video_url = f"/static/videos/{mp4_filename}"
-                                if os.path.exists(raw_webm_path):
-                                    os.remove(raw_webm_path)
-                            else:
-                                fallback_path = os.path.join(settings.VIDEO_DIR, f"{run_id}.webm")
-                                shutil.move(raw_webm_path, fallback_path)
-                                final_video_url = f"/static/videos/{run_id}.webm"
-                    except Exception as ve:
-                        print(f"Video Error: {ve}")
+                test_run.status = "SUCCESS"
+                test_run.video_url = relative_video_path
+                test_run.error_log = None
+                await db.commit()
 
-                if test_run:
-                    test_run.status = status
-                    test_run.video_url = final_video_url
-                    test_run.error_log = error_log
-                    await db.commit()
+        except asyncio.TimeoutError:
+            test_run.status = "FAILED"
+            test_run.error_log = "Eksekusi tes dibatalkan karena melebihi batas waktu maksimal (Timeout 60 detik)."
+            await db.commit()
+        except Exception as e:
+            test_run.status = "FAILED"
+            test_run.error_log = str(e)
+            await db.commit()
+        finally:
+            await thread_engine.dispose()
 
-def _run_in_isolated_thread(run_id: str, test_case_id: int):
+
+def run_test_scenario(run_id: str, case_id: int):
+    """Worker task terisolasi dengan ProactorEventLoopPolicy di Windows."""
     if sys.platform == "win32":
         asyncio.set_event_loop_policy(asyncio.WindowsProactorEventLoopPolicy())
-    new_loop = asyncio.new_event_loop()
-    asyncio.set_event_loop(new_loop)
-    try:
-        new_loop.run_until_complete(_async_run_test_scenario(run_id, test_case_id))
-    finally:
-        new_loop.close()
-
-async def run_test_scenario(run_id: str, test_case_id: int):
-    if sys.platform == "win32":
-        loop = asyncio.get_running_loop()
-        with concurrent.futures.ThreadPoolExecutor() as pool:
-            await loop.run_in_executor(pool, _run_in_isolated_thread, run_id, test_case_id)
-    else:
-        await _async_run_test_scenario(run_id, test_case_id)
+    
+    asyncio.run(_async_run_test_scenario(run_id, case_id))

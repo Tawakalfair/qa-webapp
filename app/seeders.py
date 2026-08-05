@@ -4,6 +4,12 @@ from app.models.models import CommandDefinition, Project
 
 INITIAL_COMMANDS = [
     {
+        "code": "INCLUDE_SCENARIO", "label": "Menyisipkan Sub-Skenario",
+        "description": "Menjalankan seluruh langkah dari skenario tes lain sebagai sub-langkah",
+        "requires_selector": False, "requires_value": True,
+        "placeholder_selector": "-", "placeholder_value": "ID Skenario Target (misal: 1)"
+    },
+    {
         "code": "GOTO_URL", "label": "Membuka URL Target",
         "description": "Membuka URL utama atau relative path",
         "requires_selector": False, "requires_value": True,

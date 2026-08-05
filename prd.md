@@ -154,3 +154,11 @@ qa_webapp/
 ├── .gitignore
 ├── requirements.txt
 └── prd.md                          # Product Requirement Document
+```
+
+### FR-6: Reusable Scenario Architecture (INCLUDE_SCENARIO Command)
+* Pengguna dapat menyisipkan skenario tes lain ke dalam skenario aktif menggunakan perintah master `INCLUDE_SCENARIO`.
+* Nilai `input_value` menyimpan ID Skenario Target yang ingin dieksekusi.
+* Mesin eksekusi Playwright mengeksekusi langkah-langkah sub-skenario secara rekursif dalam browser session context yang sama.
+* Dilengkapi dengan **Circular Dependency Safeguard** untuk mendeteksi dan menghentikan loop panggilan antar-skenario tak terbatas secara otomatis.
+* Ekspor Excel Laporan UT Document Matrix secara otomatis merakit ulang sub-langkah dari skenario yang disisipkan.

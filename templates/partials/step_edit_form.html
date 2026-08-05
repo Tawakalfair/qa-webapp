@@ -1,15 +1,15 @@
-<tr id="step-row-{{ step.id }}" class="bg-blue-50/70 border-b border-blue-200">
-    <td class="px-3 py-3 text-center text-xs font-bold text-blue-600">
+<tr id="step-row-{{ step.id }}" class="bg-blue-50/60">
+    <td class="px-3 py-3 text-center text-xs font-bold text-blue-600 align-middle">
         {{ step.step_order }}
     </td>
     <td colspan="4" class="px-3 py-2">
-        <form hx-post="/testcase/{{ case_id }}/step/{{ step.id }}/edit" 
-              hx-target="#step-list-container" 
-              hx-swap="innerHTML" 
-              class="flex items-center gap-2">
+        <form hx-post="/testcase/{{ case_id }}/step/{{ step.id }}/edit"
+              hx-target="#step-list-container"
+              hx-swap="outerHTML"
+              class="flex items-center gap-2 w-full">
             
-            <!-- Command Dropdown -->
-            <select name="command" required class="px-2.5 py-1.5 border border-slate-300 rounded-lg text-xs font-mono font-semibold text-slate-700 bg-white focus:outline-none focus:border-blue-500">
+            <!-- Select Command -->
+            <select name="command" required onchange="toggleStepInputs(this)" class="px-2 py-1.5 border border-slate-300 rounded-lg text-xs font-mono font-semibold bg-white focus:outline-none focus:border-blue-500">
                 {% for cmd in commands %}
                 <option value="{{ cmd.code }}" {% if cmd.code == step.command %}selected{% endif %}>
                     {{ cmd.code }}
@@ -18,27 +18,37 @@
             </select>
 
             <!-- Target Selector -->
-            <input type="text" name="target_selector" value="{{ step.target_selector or '' }}" 
-                   placeholder="Target Selector (opsional)" 
-                   class="flex-1 px-2.5 py-1.5 border border-slate-300 rounded-lg text-xs font-mono bg-white focus:outline-none focus:border-blue-500 min-w-[130px]">
+            <input type="text" name="target_selector" value="{{ step.target_selector or '' }}" placeholder="Target Selector"
+                   {% if step.command == 'INCLUDE_SCENARIO' %}disabled placeholder="Tidak diperlukan (-)" class="px-2 py-1.5 border border-slate-300 rounded-lg text-xs font-mono flex-1 bg-slate-100 cursor-not-allowed"{% else %}class="px-2 py-1.5 border border-slate-300 rounded-lg text-xs font-mono flex-1 bg-white focus:outline-none focus:border-blue-500"{% endif %}>
 
-            <!-- Input Value -->
-            <input type="text" name="input_value" value="{{ step.input_value or '' }}" 
-                   placeholder="Input Value (opsional)" 
-                   class="flex-1 px-2.5 py-1.5 border border-slate-300 rounded-lg text-xs font-mono bg-white focus:outline-none focus:border-blue-500 min-w-[130px]">
+            <!-- Input Value (Text Input) -->
+            <input type="text" name="{% if step.command == 'INCLUDE_SCENARIO' %}input_value_text{% else %}input_value{% endif %}" value="{{ step.input_value or '' }}" placeholder="Input Value"
+                   class="{% if step.command == 'INCLUDE_SCENARIO' %}hidden {% endif %}px-2 py-1.5 border border-slate-300 rounded-lg text-xs font-mono flex-1 bg-white focus:outline-none focus:border-blue-500 step-input-text"
+                   {% if step.command == 'INCLUDE_SCENARIO' %}disabled{% endif %}>
 
-            <!-- Action Buttons -->
-            <div class="flex items-center gap-1.5">
-                <button type="submit" title="Simpan Perubahan" class="bg-emerald-600 hover:bg-emerald-700 text-white font-semibold text-xs px-3 py-1.5 rounded-lg shadow-sm transition-colors flex items-center gap-1">
-                    💾 <span>Simpan</span>
+            <!-- Input Value (Dropdown Skenario Target) -->
+            <select name="{% if step.command == 'INCLUDE_SCENARIO' %}input_value{% else %}input_value_select{% endif %}"
+                    class="{% if step.command != 'INCLUDE_SCENARIO' %}hidden {% endif %}px-2 py-1.5 border border-slate-300 rounded-lg text-xs font-semibold flex-1 bg-white focus:outline-none focus:border-blue-500 step-input-select"
+                    {% if step.command != 'INCLUDE_SCENARIO' %}disabled{% endif %}>
+                <option value="">-- Pilih Skenario Target --</option>
+                {% for other in other_cases %}
+                <option value="{{ other.id }}" {% if step.command == 'INCLUDE_SCENARIO' and (other.id|string == step.input_value) %}selected{% endif %}>
+                    📁 [{{ other.project.name if other.project else 'Default' }}] {{ other.name }}
+                </option>
+                {% endfor %}
+            </select>
+
+            <!-- Tombol Aksi -->
+            <div class="flex items-center gap-1">
+                <button type="submit" class="bg-blue-600 hover:bg-blue-700 text-white font-bold px-3 py-1.5 rounded-lg text-xs shadow-sm transition-colors cursor-pointer">
+                    Simpan
                 </button>
                 <button type="button" 
                         hx-get="/testcase/{{ case_id }}" 
                         hx-target="#right-panel" 
                         hx-swap="innerHTML"
-                        title="Batal Edit" 
-                        class="bg-slate-200 hover:bg-slate-300 text-slate-700 font-semibold text-xs px-2.5 py-1.5 rounded-lg transition-colors">
-                    ✕
+                        class="bg-slate-200 hover:bg-slate-300 text-slate-700 font-bold px-3 py-1.5 rounded-lg text-xs transition-colors cursor-pointer">
+                    Batal
                 </button>
             </div>
         </form>

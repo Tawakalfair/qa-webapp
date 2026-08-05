@@ -5,15 +5,19 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>{{ title }}</title>
     
-    <!-- Local Static JS Imports -->
-    <script src="/static/js/htmx.min.js"></script>
-    <script src="/static/js/tailwindcss.js"></script>
+    <!-- Local Static JS Imports dengan atribut defer -->
+    <script src="/static/js/htmx.min.js" defer></script>
+    <script src="/static/js/tailwindcss.js" defer></script>
+    <script src="/static/js/app.js" defer></script>
 </head>
 <body class="bg-slate-100 min-h-screen font-sans text-slate-800 antialiased">
     
-    <!-- Top Navbar Minimalis -->
+    <!-- Container Toast Notification -->
+    <div id="toast-container" class="fixed top-5 right-5 z-50 flex flex-col gap-2"></div>
+
+    <!-- Top Navbar Minimalis (Diperluas ke max-w-[1700px]) -->
     <header class="bg-white border-b border-slate-200 sticky top-0 z-40 shadow-sm">
-        <div class="max-w-7xl mx-auto px-6 py-3.5 flex items-center justify-between">
+        <div class="max-w-[1700px] mx-auto px-6 xl:px-10 py-3.5 flex items-center justify-between">
             <div class="flex items-center space-x-3">
                 <div class="w-10 h-10 bg-blue-600 text-white rounded-xl flex items-center justify-center font-black text-xl shadow-lg shadow-blue-500/30">
                     QA
@@ -26,60 +30,85 @@
 
             <!-- Tombol Aksi Header -->
             <div class="flex items-center gap-3">
-                <!-- Tombol Buat Proyek Baru -->
                 <button type="button"
-                        onclick="document.getElementById('project-modal').classList.remove('hidden')" 
+                        onclick="openProjectModal()" 
                         class="bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold text-xs px-3.5 py-2 rounded-xl transition-colors flex items-center gap-1.5 border border-slate-300">
                     <span>➕</span> Proyek Baru
                 </button>
 
-                <!-- Tombol Ekspor Excel UT Document Matrix -->
-                <a href="/export/ut-matrix{% if selected_project_id %}?project_id={{ selected_project_id }}{% endif %}" 
-                   class="bg-emerald-600 hover:bg-emerald-700 text-white font-semibold text-xs px-4 py-2 rounded-xl shadow-md transition-all flex items-center gap-2">
+                <button type="button"
+                        onclick="exportExcel('{{ selected_project_id or '' }}')" 
+                        class="bg-emerald-600 hover:bg-emerald-700 text-white font-semibold text-xs px-4 py-2 rounded-xl shadow-md transition-all flex items-center gap-2 cursor-pointer">
                     <span>📊</span> Ekspor Excel UT Document
-                </a>
+                </button>
             </div>
         </div>
     </header>
 
-    <!-- Filter Bar Toolbar -->
+    <!-- Filter Bar Toolbar (Diperluas ke max-w-[1700px]) -->
     <div class="bg-white border-b border-slate-200">
-        <div class="max-w-7xl mx-auto px-6 py-3 flex items-center justify-between gap-4">
-            <form action="/" method="GET" class="flex items-center gap-3 w-full">
+        <div class="max-w-[1700px] mx-auto px-6 xl:px-10 py-3 flex items-center justify-between gap-4">
+            <div class="flex items-center gap-3 w-full">
                 <span class="text-xs font-bold uppercase tracking-wider text-slate-400">Filter:</span>
                 
-                <!-- Select Proyek -->
-                <select name="project_id" onchange="this.form.submit()" class="px-3 py-1.5 border border-slate-300 rounded-xl text-xs font-semibold text-slate-700 bg-slate-50 focus:outline-none focus:border-blue-500">
-                    <option value="">📁 Semua Proyek</option>
+                <form action="/" method="GET" class="flex items-center gap-2">
+                    <!-- Select Proyek -->
+                    <select name="project_id" onchange="this.form.submit()" class="px-3 py-1.5 border border-slate-300 rounded-xl text-xs font-semibold text-slate-700 bg-slate-50 focus:outline-none focus:border-blue-500">
+                        <option value="">📁 Semua Proyek</option>
+                        {% for proj in projects %}
+                        <option value="{{ proj.id }}" {% if selected_project_id == proj.id %}selected{% endif %}>
+                            {{ proj.name }}
+                        </option>
+                        {% endfor %}
+                    </select>
+
+                    <!-- Select Tipe Tes -->
+                    <select name="test_type" onchange="this.form.submit()" class="px-3 py-1.5 border border-slate-300 rounded-xl text-xs font-semibold text-slate-700 bg-slate-50 focus:outline-none focus:border-blue-500">
+                        <option value="">🏷️ Semua Tipe Tes</option>
+                        <option value="REGRESSION" {% if selected_test_type == 'REGRESSION' %}selected{% endif %}>🟢 Regression</option>
+                        <option value="CHANGE_REQUEST" {% if selected_test_type == 'CHANGE_REQUEST' %}selected{% endif %}>🔵 Change Request (CR)</option>
+                        <option value="NEW_FEATURE" {% if selected_test_type == 'NEW_FEATURE' %}selected{% endif %}>🟣 New Feature</option>
+                        <option value="HOTFIX" {% if selected_test_type == 'HOTFIX' %}selected{% endif %}>🔴 Hotfix</option>
+                    </select>
+
+                    {% if selected_project_id or selected_test_type %}
+                    <a href="/" class="text-xs text-red-500 hover:underline font-semibold ml-1">Reset Filter</a>
+                    {% endif %}
+                </form>
+
+                <!-- Tombol Edit & Delete khusus Proyek Aktif -->
+                {% if selected_project_id %}
                     {% for proj in projects %}
-                    <option value="{{ proj.id }}" {% if selected_project_id == proj.id %}selected{% endif %}>
-                        {{ proj.name }}
-                    </option>
+                        {% if selected_project_id == proj.id %}
+                        <div class="flex items-center gap-1 ml-auto border-l border-slate-200 pl-4">
+                            <button type="button"
+                                    onclick="openEditProjectModal('{{ proj.id }}', '{{ proj.name|e }}', '{{ (proj.description or '')|e }}')"
+                                    title="Edit Nama/Deskripsi Proyek"
+                                    class="px-2.5 py-1.5 text-slate-600 hover:text-blue-600 bg-slate-50 hover:bg-blue-50 border border-slate-300 rounded-xl transition-colors text-xs font-semibold flex items-center gap-1">
+                                ✏️ Edit Proyek
+                            </button>
+                            <form action="/projects/{{ proj.id }}/delete" method="POST" 
+                                  onsubmit="return confirm('Apakah Anda yakin ingin menghapus proyek \'{{ proj.name|e }}\'? Seluruh skenario pengujian di dalamnya akan ikut terhapus!')">
+                                <button type="submit"
+                                        title="Hapus Proyek Ini"
+                                        class="px-2.5 py-1.5 text-slate-600 hover:text-red-600 bg-slate-50 hover:bg-red-50 border border-slate-300 rounded-xl transition-colors text-xs font-semibold flex items-center gap-1">
+                                    🗑️ Hapus Proyek
+                                </button>
+                            </form>
+                        </div>
+                        {% endif %}
                     {% endfor %}
-                </select>
-
-                <!-- Select Tipe Tes -->
-                <select name="test_type" onchange="this.form.submit()" class="px-3 py-1.5 border border-slate-300 rounded-xl text-xs font-semibold text-slate-700 bg-slate-50 focus:outline-none focus:border-blue-500">
-                    <option value="">🏷️ Semua Tipe Tes</option>
-                    <option value="REGRESSION" {% if selected_test_type == 'REGRESSION' %}selected{% endif %}>🟢 Regression</option>
-                    <option value="CHANGE_REQUEST" {% if selected_test_type == 'CHANGE_REQUEST' %}selected{% endif %}>🔵 Change Request (CR)</option>
-                    <option value="NEW_FEATURE" {% if selected_test_type == 'NEW_FEATURE' %}selected{% endif %}>🟣 New Feature</option>
-                    <option value="HOTFIX" {% if selected_test_type == 'HOTFIX' %}selected{% endif %}>🔴 Hotfix</option>
-                </select>
-
-                {% if selected_project_id or selected_test_type %}
-                <a href="/" class="text-xs text-red-500 hover:underline font-semibold ml-2">Reset Filter</a>
                 {% endif %}
-            </form>
+            </div>
         </div>
     </div>
 
-    <!-- Main Container Layout -->
-    <main class="max-w-7xl mx-auto px-6 py-8">
+    <!-- Main Container Layout (Diperluas dengan Pembagian Grid Responsif) -->
+    <main class="max-w-[1700px] mx-auto px-6 xl:px-10 py-8">
         <div class="grid grid-cols-12 gap-8">
             
-            <!-- Side Panel Kiri: Form Buat Skenario & List Skenario -->
-            <div class="col-span-12 lg:col-span-5 space-y-6">
+            <!-- Side Panel Kiri: Form Buat Skenario & List Skenario (Laptop: 5/12, Monitor Eksternal: 4/12) -->
+            <div class="col-span-12 lg:col-span-5 2xl:col-span-4 space-y-6">
                 
                 <!-- Card Form Tambah Skenario Baru -->
                 <div class="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm">
@@ -207,6 +236,11 @@
                             
                             <!-- Badges Header -->
                             <div class="flex items-center gap-1.5 mb-1.5 flex-wrap">
+                                <!-- Menampilkan ID Skenario di List Kiri -->
+                                <span class="text-[10px] font-mono font-bold px-2 py-0.5 rounded-md bg-blue-100 text-blue-800 border border-blue-200">
+                                    #{{ case.id }}
+                                </span>
+
                                 <span class="text-[10px] font-bold px-2 py-0.5 rounded-md bg-slate-100 text-slate-600 border border-slate-200">
                                     📁 {{ case.project.name if case.project else 'Default' }}
                                 </span>
@@ -239,7 +273,7 @@
                             <div class="flex justify-between items-start">
                                 <div>
                                     <h4 class="font-bold text-slate-800 text-sm group-hover:text-blue-600 leading-snug">{{ case.name }}</h4>
-                                    <p class="text-xs text-slate-400 font-mono mt-0.5 truncate max-w-[240px]">{{ case.base_url }}</p>
+                                    <p class="text-xs text-slate-400 font-mono mt-0.5 truncate max-w-[280px]">{{ case.base_url }}</p>
                                 </div>
                                 <form action="/testcase/{{ case.id }}/delete" method="POST" onsubmit="return confirm('Hapus skenario ini?')">
                                     <button type="submit" class="text-slate-300 hover:text-red-500 p-1 transition-colors">🗑️</button>
@@ -253,8 +287,8 @@
                 </div>
             </div>
 
-            <!-- Panel Kanan: Skenario Detail & Langkah Instruksi -->
-            <div id="right-panel" class="col-span-12 lg:col-span-7">
+            <!-- Panel Kanan: Skenario Detail & Langkah Instruksi (Laptop: 7/12, Monitor Eksternal: 8/12) -->
+            <div id="right-panel" class="col-span-12 lg:col-span-7 2xl:col-span-8">
                 <div class="bg-white p-12 rounded-2xl border border-slate-200 text-center text-slate-400 shadow-sm">
                     <p class="text-base font-medium">👈 Pilih salah satu skenario di panel kiri untuk mulai menyusun langkah tes.</p>
                 </div>
@@ -263,11 +297,11 @@
         </div>
     </main>
 
-    <!-- Modal Popup Buat Proyek Baru (Hidden by default) -->
+    <!-- Modal Popup Buat Proyek Baru -->
     <div id="project-modal" class="hidden fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 backdrop-blur-sm">
         <div class="bg-white rounded-2xl shadow-xl border border-slate-200 w-full max-w-md p-6 relative">
             <button type="button" 
-                    onclick="document.getElementById('project-modal').classList.add('hidden')" 
+                    onclick="closeProjectModal()" 
                     class="absolute top-4 right-4 text-slate-400 hover:text-slate-600 p-1 transition-colors">
                 ✕
             </button>
@@ -290,13 +324,53 @@
                 </div>
                 <div class="flex items-center justify-end gap-2 pt-2">
                     <button type="button" 
-                            onclick="document.getElementById('project-modal').classList.add('hidden')" 
+                            onclick="closeProjectModal()" 
                             class="px-4 py-2 text-xs font-semibold text-slate-600 bg-slate-100 hover:bg-slate-200 rounded-xl transition-colors">
                         Batal
                     </button>
                     <button type="submit" 
                             class="px-4 py-2 text-xs font-semibold text-white bg-blue-600 hover:bg-blue-700 rounded-xl shadow-md transition-colors">
                         Simpan Proyek
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Modal Popup Edit Proyek -->
+    <div id="edit-project-modal" class="hidden fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 backdrop-blur-sm">
+        <div class="bg-white rounded-2xl shadow-xl border border-slate-200 w-full max-w-md p-6 relative">
+            <button type="button" 
+                    onclick="closeEditProjectModal()" 
+                    class="absolute top-4 right-4 text-slate-400 hover:text-slate-600 p-1 transition-colors">
+                ✕
+            </button>
+
+            <h3 class="text-base font-bold text-slate-900 mb-1 flex items-center gap-2">
+                <span>✏️</span> Edit Detail Proyek
+            </h3>
+            <p class="text-xs text-slate-500 mb-4">Ubah nama atau deskripsi proyek yang dipilih.</p>
+
+            <form id="edit-project-form" action="" method="POST" class="space-y-4">
+                <div>
+                    <label class="block text-xs font-semibold text-slate-600 uppercase mb-1">Nama Proyek <span class="text-red-500">*</span></label>
+                    <input type="text" id="edit-project-name" name="name" required 
+                           class="w-full px-3.5 py-2 rounded-xl border border-slate-300 focus:outline-none focus:border-blue-500 text-sm">
+                </div>
+                <div>
+                    <label class="block text-xs font-semibold text-slate-600 uppercase mb-1">Deskripsi (Opsional)</label>
+                    <textarea id="edit-project-description" name="description" rows="3" 
+                              class="w-full px-3.5 py-2 rounded-xl border border-slate-300 focus:outline-none focus:border-blue-500 text-sm"></textarea>
+                </div>
+                <div class="flex items-center justify-end gap-2 pt-2">
+                    <button type="button" 
+                            onclick="closeEditProjectModal()" 
+                            class="px-4 py-2 text-xs font-semibold text-slate-600 bg-slate-100 hover:bg-slate-200 rounded-xl transition-colors">
+                        Batal
+                    </button>
+                    <button type="submit" 
+                            class="px-4 py-2 text-xs font-semibold text-white bg-blue-600 hover:bg-blue-700 rounded-xl shadow-md transition-colors">
+                        Perbarui Proyek
                     </button>
                 </div>
             </form>

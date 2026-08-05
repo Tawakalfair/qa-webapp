@@ -1,66 +1,172 @@
-<div class="space-y-8">
+<div class="space-y-8 animate-in fade-in duration-200">
     
-    <!-- Detail & Tombol Run -->
-    <div class="bg-white p-6 rounded-2xl shadow-sm border">
-        <div class="flex justify-between items-center mb-6">
+    <div class="bg-white p-6 rounded-2xl shadow-sm border border-slate-200">
+        <div class="flex items-start justify-between">
             <div>
-                <span class="bg-blue-50 text-blue-700 text-xs font-bold px-2 py-1 rounded-full">SKENARIO: {{ case.id }}</span>
-                <h2 class="text-2xl font-extrabold mt-1">{{ case.name }}</h2>
-                <p class="text-xs text-slate-400 font-mono mt-0.5">{{ case.base_url }}</p>
+                <div class="flex items-center gap-2 mb-2 flex-wrap">
+                    <span class="text-xs font-mono font-bold px-2.5 py-1 rounded-lg bg-blue-100 text-blue-800 border border-blue-300 shadow-sm">
+                        🆔 ID: {{ case.id }}
+                    </span>
+
+                    <span class="text-xs font-bold px-2.5 py-1 rounded-lg bg-slate-100 text-slate-700 border border-slate-200">
+                        📁 {{ case.project.name if case.project else 'Default Project' }}
+                    </span>
+                    <span class="text-xs font-bold px-2.5 py-1 rounded-lg bg-blue-50 text-blue-700 border border-blue-200">
+                        {{ case.test_type }}
+                    </span>
+                    {% if case.reference_number %}
+                    <span class="text-xs font-mono font-bold px-2.5 py-1 rounded-lg bg-amber-50 text-amber-800 border border-amber-200">
+                        🏷️ {{ case.reference_number }}
+                    </span>
+                    {% endif %}
+                </div>
+                <h2 class="text-2xl font-extrabold text-slate-900 mt-1">{{ case.name }}</h2>
+                <p class="text-xs text-slate-400 font-mono mt-0.5">Target Base URL: <a href="{{ case.base_url }}" target="_blank" class="text-blue-600 hover:underline">{{ case.base_url }}</a></p>
             </div>
-            
+
             <button hx-post="/testcase/{{ case.id }}/run" 
                     hx-target="#run-status-container"
-                    class="bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 px-6 rounded-xl transition-all shadow-md shadow-blue-100">
+                    class="bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 px-6 rounded-xl transition-all shadow-md shadow-blue-100 flex items-center gap-2 cursor-pointer">
                 ▶ Jalankan Tes
             </button>
         </div>
 
-        <div id="run-status-container"></div>
+        <details class="mt-4 border border-slate-200 rounded-xl bg-slate-50/70 overflow-hidden group">
+            <summary class="px-4 py-2.5 text-xs font-bold text-slate-700 cursor-pointer select-none flex items-center justify-between hover:bg-slate-100 transition-colors">
+                <span>📝 Edit Metadata UT Document (Excel Override)</span>
+                <span class="text-slate-400 group-open:rotate-180 transition-transform">▼</span>
+            </summary>
+            <form hx-post="/testcase/{{ case.id }}/edit-ut-metadata" 
+                  hx-target="#right-panel" 
+                  hx-swap="innerHTML"
+                  class="p-4 bg-white border-t border-slate-200 space-y-3">
+                <div class="grid grid-cols-2 gap-3">
+                    <div>
+                        <label class="block text-[10px] font-bold text-slate-500 uppercase mb-1">Theme</label>
+                        <input type="text" name="ut_theme" value="{{ case.ut_theme or '' }}" placeholder="Auto: {{ case.project.name if case.project else 'Default' }}" class="w-full px-2.5 py-1.5 border border-slate-300 rounded-lg text-xs">
+                    </div>
+                    <div>
+                        <label class="block text-[10px] font-bold text-slate-500 uppercase mb-1">Function Name</label>
+                        <input type="text" name="ut_function_name" value="{{ case.ut_function_name or '' }}" placeholder="Auto: {{ case.name }}" class="w-full px-2.5 py-1.5 border border-slate-300 rounded-lg text-xs">
+                    </div>
+                </div>
+                <div class="grid grid-cols-2 gap-3">
+                    <div>
+                        <label class="block text-[10px] font-bold text-slate-500 uppercase mb-1">Classification</label>
+                        <select name="ut_classification" class="w-full px-2.5 py-1.5 border border-slate-300 rounded-lg text-xs">
+                            <option value="" {% if not case.ut_classification %}selected{% endif %}>Auto: Normal</option>
+                            <option value="Normal" {% if case.ut_classification == 'Normal' %}selected{% endif %}>Normal</option>
+                            <option value="Abnormal (Error Handling)" {% if case.ut_classification == 'Abnormal (Error Handling)' %}selected{% endif %}>Abnormal (Error Handling)</option>
+                            <option value="Boundary Condition" {% if case.ut_classification == 'Boundary Condition' %}selected{% endif %}>Boundary Condition</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label class="block text-[10px] font-bold text-slate-500 uppercase mb-1">Condition 1</label>
+                        <input type="text" name="ut_condition_1" value="{{ case.ut_condition_1 or '' }}" placeholder="Auto: Base URL" class="w-full px-2.5 py-1.5 border border-slate-300 rounded-lg text-xs">
+                    </div>
+                </div>
+                <div>
+                    <label class="block text-[10px] font-bold text-slate-500 uppercase mb-1">Condition 2</label>
+                    <input type="text" name="ut_condition_2" value="{{ case.ut_condition_2 or '' }}" placeholder="Auto: '-'" class="w-full px-2.5 py-1.5 border border-slate-300 rounded-lg text-xs">
+                </div>
+                <div>
+                    <label class="block text-[10px] font-bold text-slate-500 uppercase mb-1">Action Description</label>
+                    <textarea name="ut_action" rows="2" placeholder="Auto: Deskripsi Langkah #1" class="w-full px-2.5 py-1.5 border border-slate-300 rounded-lg text-xs">{{ case.ut_action or '' }}</textarea>
+                </div>
+                <div>
+                    <label class="block text-[10px] font-bold text-slate-500 uppercase mb-1">How to test</label>
+                    <textarea name="ut_how_to_test" rows="2" placeholder="Auto: Kompilasi seluruh TestSteps" class="w-full px-2.5 py-1.5 border border-slate-300 rounded-lg text-xs">{{ case.ut_how_to_test or '' }}</textarea>
+                </div>
+                <div>
+                    <label class="block text-[10px] font-bold text-slate-500 uppercase mb-1">Expected results</label>
+                    <textarea name="ut_expected_results" rows="2" placeholder="Auto: Kompilasi langkah VERIFY" class="w-full px-2.5 py-1.5 border border-slate-300 rounded-lg text-xs">{{ case.ut_expected_results or '' }}</textarea>
+                </div>
+                <div class="flex justify-end pt-1">
+                    <button type="submit" class="bg-slate-800 hover:bg-slate-900 text-white font-semibold text-xs px-3.5 py-1.5 rounded-lg shadow-sm transition-colors cursor-pointer">
+                        Simpan Metadata UT
+                    </button>
+                </div>
+            </form>
+        </details>
+
+        <div id="run-status-container" class="mt-4"></div>
     </div>
 
-    <!-- Form Tambah Langkah (Menu Perintah Dibaca dari Database) -->
-    <div class="bg-white p-6 rounded-2xl shadow-sm border">
-        <h3 class="font-bold text-slate-900 mb-4">＋ Tambah Langkah Instruksi</h3>
+    <!-- Form Tambah Langkah Instruksi -->
+    <div class="bg-white p-6 rounded-2xl shadow-sm border border-slate-200">
+        <h3 class="font-bold text-slate-900 mb-4 flex items-center gap-1.5">
+            <span>➕</span> Tambah Langkah Instruksi
+        </h3>
         
         <form hx-post="/testcase/{{ case.id }}/step" 
-              hx-target="#steps-list-container" 
-              hx-on::after-request="this.reset()"
-              class="grid grid-cols-1 md:grid-cols-12 gap-4 items-end">
+              hx-target="#step-list-container" 
+              hx-swap="outerHTML" 
+              hx-on::after-request="if (event.target === this) { this.reset(); toggleStepInputs(this.querySelector('select[name=command]')); }"
+              class="grid grid-cols-1 md:grid-cols-12 gap-3 items-end">
             
             <!-- Dropdown Perintah Dinamis dari DB -->
-            <div class="md:col-span-4">
-                <label class="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1">Perintah Playwright</label>
-                <select name="command" required class="w-full px-3 py-2 rounded-xl border border-slate-200 text-sm bg-white focus:ring-2 focus:ring-blue-500">
+            <div class="md:col-span-4 flex flex-col gap-1">
+                <label class="block text-xs font-semibold text-slate-500 uppercase tracking-wider">Perintah Playwright</label>
+                <select name="command" required onchange="toggleStepInputs(this)" class="w-full h-9 px-3 py-1.5 rounded-xl border border-slate-300 text-xs font-mono font-semibold bg-white focus:outline-none focus:border-blue-500">
                     {% for cmd in commands %}
                         <option value="{{ cmd.code }}">{{ cmd.code }} - {{ cmd.label }}</option>
                     {% endfor %}
                 </select>
             </div>
 
-            <div class="md:col-span-3">
-                <label class="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1">Target Selector</label>
-                <input type="text" name="target_selector" placeholder="Misal: #btn-submit" class="w-full px-3 py-2 rounded-xl border border-slate-200 text-sm">
+            <!-- Target Selector -->
+            <div class="md:col-span-3 flex flex-col gap-1">
+                <label class="block text-xs font-semibold text-slate-500 uppercase tracking-wider">Target Selector</label>
+                <input type="text" name="target_selector" placeholder="Misal: #btn-submit" class="w-full h-9 px-3 py-1.5 rounded-xl border border-slate-300 text-xs font-mono">
             </div>
 
-            <div class="md:col-span-3">
-                <label class="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1">Nilai Input / Value</label>
-                <input type="text" name="input_value" placeholder="Misal: admin123" class="w-full px-3 py-2 rounded-xl border border-slate-200 text-sm">
+            <!-- Nilai Input / Value (Text vs Live Search Skenario) -->
+            <div class="md:col-span-3 flex flex-col gap-1">
+                <label class="block text-xs font-semibold text-slate-500 uppercase tracking-wider">Nilai Input / Value</label>
+                
+                <!-- Wrapper dengan Tinggi Tetap agar Layout Tidak Bergeser -->
+                <div class="relative w-full h-9">
+                    <!-- Input Teks Biasa -->
+                    <input type="text" name="input_value" placeholder="Misal: admin123" class="w-full h-9 px-3 py-1.5 rounded-xl border border-slate-300 text-xs font-mono step-input-text">
+                    
+                    <!-- Container Live Search HTMX -->
+                <div class="step-input-select hidden relative w-full h-9">
+                    <input type="hidden" id="selected-scenario-id" name="input_value_select" disabled>
+                    
+                    <!-- TAMBAHKAN hx-swap="innerHTML" SECARA EKSPLISIT DISINI -->
+                    <input type="text" 
+                        id="scenario-search-input"
+                        placeholder="🔍 Ketik min. 2 karakter..." 
+                        hx-get="/testcases/search?current_case_id={{ case.id }}"
+                        hx-trigger="keyup delay:300ms"
+                        hx-target="#scenario-search-results"
+                        hx-swap="innerHTML"
+                        hx-on::before-request="if (this.value.includes('📁')) { event.preventDefault(); return false; } document.getElementById('scenario-search-results').style.display = 'block';"
+                        hx-on::after-request="event.stopPropagation()"
+                        name="q"
+                        autocomplete="off"
+                        disabled
+                        onclick="if(this.value.includes('📁')) { this.value=''; document.getElementById('selected-scenario-id').value=''; }"
+                        class="w-full h-9 px-3 py-1.5 rounded-xl border border-slate-300 text-xs font-semibold bg-white focus:outline-none focus:border-blue-500 cursor-text">
+                    
+                    <!-- Dropdown Popup Melayang -->
+                    <div id="scenario-search-results" class="absolute left-0 top-full mt-1 w-80 md:w-[360px] z-[100]" style="display: none;"></div>
+                </div>
+                </div>
             </div>
-
-            <div class="md:col-span-2">
-                <button type="submit" class="w-full bg-slate-900 hover:bg-slate-800 text-white font-bold py-2 rounded-xl text-sm transition-all shadow-sm">
-                    Tambah
+            
+            <!-- Tombol Tambah -->
+            <div class="md:col-span-2 flex flex-col justify-end">
+                <button type="submit" class="w-full h-9 bg-slate-900 hover:bg-slate-800 text-white font-bold py-1.5 px-3 rounded-xl text-xs transition-all shadow-sm cursor-pointer">
+                    + Tambah
                 </button>
             </div>
         </form>
     </div>
 
-    <!-- Tabel Daftar Langkah -->
-    <div class="bg-white p-6 rounded-2xl shadow-sm border">
-        <h3 class="font-bold text-slate-900 mb-4">Alur Pengujian Skenario</h3>
-        <div id="steps-list-container">
-            {% include 'partials/step_list.html' %}
-        </div>
+    <div class="bg-white p-6 rounded-2xl shadow-sm border border-slate-200 space-y-4">
+        <h3 class="font-bold text-slate-900">Alur Pengujian Skenario</h3>
+        {% include 'partials/step_list.html' %}
     </div>
+
 </div>

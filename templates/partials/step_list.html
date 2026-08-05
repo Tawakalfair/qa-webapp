@@ -17,14 +17,26 @@
                     <td class="px-3 py-3 text-center text-xs font-bold text-slate-400">
                         {{ step.step_order }}
                     </td>
-                    <td class="px-3 py-3 font-mono font-semibold text-xs text-blue-600">
-                        {{ step.command }}
+                    <td class="px-3 py-3 font-mono font-semibold text-xs">
+                        {% if step.command == 'INCLUDE_SCENARIO' %}
+                        <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-purple-100 text-purple-700 font-bold border border-purple-200">
+                            🔗 INCLUDE_SCENARIO
+                        </span>
+                        {% else %}
+                        <span class="text-blue-600">{{ step.command }}</span>
+                        {% endif %}
                     </td>
                     <td class="px-3 py-3 font-mono text-xs text-slate-600 truncate max-w-[150px]">
                         {{ step.target_selector or '-' }}
                     </td>
-                    <td class="px-3 py-3 font-mono text-xs text-slate-600 truncate max-w-[150px]">
+                    <td class="px-3 py-3 font-mono text-xs text-slate-600 truncate max-w-[180px]">
+                        {% if step.command == 'INCLUDE_SCENARIO' %}
+                        <span class="bg-purple-50 text-purple-800 font-semibold px-2 py-0.5 rounded border border-purple-100">
+                            Target Scenario ID: #{{ step.input_value }}
+                        </span>
+                        {% else %}
                         {{ step.input_value or '-' }}
+                        {% endif %}
                     </td>
                     <td class="px-3 py-3 text-center">
                         <div class="flex items-center justify-center gap-1">
