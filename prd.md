@@ -1,167 +1,156 @@
-# 📄 Product Requirements Document (PRD) - QA Automata
+# Product Requirement Document (PRD)
 
-**Nama Produk:** QA Automata  
-**Penulis:** Mochammad Iqbal Tawaqal  
-**Organisasi/Perusahaan:** NSSOL Indonesia  
-**Tanggal Update:** 26 Juli 2026  
-**Versi Dokumen:** v2.0 (FastAPI + HTMX + Playwright + FFmpeg Engine)  
-**Status:** In Development / Production Ready (Local Intranet)  
+## 1. Executive Summary & Product Overview
+**QA Automata** adalah platform *web-based automated testing* & *visual regression tool* berbasis **FastAPI**, **Playwright**, dan **HTMX**. Platform ini dirancang untuk memudahkan QA Engineer, Developer, dan Project Manager dalam menyusun, mengeksekusi, dan merekam pengujian UI web tanpa perlu menulis skrip pengujian manual berulang.
+
+Pembaruan versi ini berfokus pada **Manajemen Proyek**, **Keterlacakan Change Request (CR)**, serta **Otomatisasi Pembuatan Laporan Unit Test (UT Document Matrix)** dalam format Excel (`.xlsx`) standar industri (NSSOL / Enterprise Standard) dengan metode *Hybrid Fallback*.
 
 ---
 
-## 1. Ringkasan Eksekutif (Executive Summary)
+## 2. Dynamic Hybrid Fallback Logic (UT Matrix Document Export)
 
-**QA Automata** adalah platform dashboard berbasis web untuk memfasilitasi pembuatan, pengelolaan, dan eksekusi skenario pengujian UI (*User Interface*) secara otomatis tanpa kode (*Low-Code / No-Code Approach*). 
+Setiap pengujian dikaitkan dengan 9 kolom standar *UT Document Header*. Sistem menerapkan prinsip **Hybrid (Manual Override + Auto-Generated Fallback)**: jika pengguna tidak mengisi field opsional, sistem akan menghasilkan konten secara otomatis saat proses ekspor Excel.
 
-Aplikasi ini menggunakan arsitektur **Server-Side Rendering (SSR) berbasis HTMX** yang dipadukan dengan **FastAPI (Python 3.12)**. Di latar belakang, eksekusi dilakukan oleh mesin **Playwright** secara asinkron (*Background Tasks*) dengan skema **Command Handler Pattern**. Sesi pengujian direkam dan otomatis dikonversi menggunakan **FFmpeg** menjadi berkas MP4 (H.264) untuk langsung dapat diputar di browser web tanpa kendala *playback*.
-
----
-
-## 2. Tujuan dan Sasaran (Goals & Objectives)
-
-* **Pengujian Low-Code:** Memungkinkan tim QA dan pengembang menyusun urutan instruksi tes visual melalui antarmuka web tanpa harus menulis skrip kode dari awal.
-* **Arsitektur Modular & Extensible:** Memisahkan katalog perintah (*Master Data Command*) dari logika engine sehingga penambahan instruksi Playwright baru dapat dilakukan dengan sangat mudah.
-* **Bukti Visual Nyata (Video Playback):** Merekam setiap sesi pengujian dan menyajikan video MP4 hasil pengujian di halaman web secara *real-time*.
-* **Performa Tinggi & Tanpa Reload:** Memanfaatkan **HTMX** untuk pembaruan komponen UI (*HTML Fragments*) secara asinkron tanpa memuat ulang (*reload*) halaman.
-* **Aksesibilitas Jaringan Internal:** Berjalan di lingkungan intranet lokal untuk menguji aplikasi web *staging/internal* yang berada di balik *firewall* perusahaan.
-
----
-
-## 3. Ruang Lingkup Sistem (System Scope)
-
-### In-Scope (Sudah Terimplementasi)
-* **Manajemen Skenario Tes (`TestCase`):** Pembuatan, pemilihan, dan penghapusan skenario tes beserta Base URL.
-* **Manajemen Langkah Pengujian (`TestStep`):**
-  * Penyusunan langkah berbasis tabel interaktif Tailwind CSS.
-  * *Dropdown* perintah dinamis yang dibaca langsung dari database.
-  * Penghapusan langkah secara *real-time* via HTMX dengan pengurutan nomor (*step_order*) otomatis.
-* **Manajemen Katalog Perintah Master (`/commands`):**
-  * Halaman khusus CRUD (Create, Read, Update via HTMX Modal, Delete) untuk daftar perintah Playwright (`CommandDefinition`).
-* **Mesin Eksekusi Playwright Asinkron:**
-  * Eksekutor berbasis *Command Handler / Registry Pattern* (`app/handlers.py`).
-  * Penggabungan URL otomatis (*relative path* `/path` + Base URL) via `urllib.parse.urljoin`.
-* **Pemrosesan Video Rekaman:**
-  * Perekaman otomatis sesi browser Playwright (.webm).
-  * Konversi otomatis WebM ke MP4 (H.264) + FastStart menggunakan pemanggilan `ffmpeg` CLI.
-  * Penayangan video hasil tes di UI menggunakan tag `<video>` HTML5.
-* **Real-time Polling Status:** Polling status eksekusi otomatis tiap 1.5 detik via HTMX (`hx-trigger="every 1.5s"`).
-
-### Out-of-Scope (Fase Pengembangan Selanjutnya)
-* Integrasi CI/CD Pipeline (Jenkins, GitLab CI, GitHub Actions).
-* Eksekusi paralel multi-thread/multi-worker.
-* Perekaman instruksi otomatis via Ekstensi Browser (Browser Extension Recorder).
-* Sistem Otentikasi/Otorisasi Pengguna (Multi-user RBAC).
-
----
-
-## 4. Kebutuhan Fungsional Detail (Functional Requirements)
-
-### 4.1 Modul Dashboard & Skenario (`/`)
-* **REQ-01:** Pengguna dapat membuat Skenario Tes baru dengan nama skenario dan Base URL.
-* **REQ-02:** Pengguna dapat memilih skenario untuk melihat detail dan urutan langkah instruksinya pada panel kanan.
-* **REQ-03:** Pengguna dapat menambah langkah instruksi baru. Pilihan *command* diambil secara dinamis dari tabel `command_definitions`.
-* **REQ-04:** Urutan langkah ditampilkan dalam bentuk **Tabel Modern Tailwind CSS** lengkap dengan *badge* berwarna untuk setiap jenis perintah.
-* **REQ-05:** Pengguna dapat menghapus langkah tertentu (`DELETE /testcase/{case_id}/step/{step_id}`) yang akan memicu penyusunan ulang nomor urut (`step_order`) secara otomatis.
-
-### 4.2 Modul Katalog Perintah Master (`/commands`)
-* **REQ-06:** Menyediakan halaman terpisah untuk mengelola katalog perintah master Playwright.
-* **REQ-07:** Pengguna dapat menambah perintah baru (*Code*, *Label*, *Description*, *Requires Selector*, *Requires Value*, *Placeholder Selector*, *Placeholder Value*).
-* **REQ-08:** Pengguna dapat mengedit perintah melalui **Modal Dialog HTMX Interaktif** (`GET /commands/{id}/edit`).
-* **REQ-09:** Pengguna dapat menghapus perintah dari katalog master secara *real-time*.
-
-### 4.3 Modul Mesin Eksekusi & Handlers (`app/engine.py` & `app/handlers.py`)
-* **REQ-10:** Tombol "▶ Jalankan Tes" memicu tugas latar belakang (*BackgroundTasks*) secara asinkron tanpa mengunci antarmuka web.
-* **REQ-11:** Logika perintah terisolasi di `app/handlers.py` menggunakan dekorator `@register("COMMAND_NAME")`.
-* **REQ-12:** Mesin Playwright menjalankan browser dalam mode *headless* dan merekam video aktivitas layar.
-* **REQ-13:** Dukungan penggabungan URL cerdas pada perintah `GOTO_URL` (mendukung relative path `/login` maupun URL lengkap).
-
-### 4.4 Modul Pemrosesan Video & Pelaporan
-* **REQ-14:** Setelah sesi browser ditutup, berkas WebM mentah dikonversi oleh fungsi `convert_webm_to_mp4()` menggunakan `ffmpeg` dengan opsi `-c:v libx264 -preset ultrafast -movflags +faststart`.
-* **REQ-15:** Berkas MP4 disimpan di direktori `static/videos/{run_id}.mp4` dan file WebM mentah dihapus untuk efisiensi penyimpanan.
-* **REQ-16:** Setelah eksekusi selesai, UI menampilkan status (✅ LULUS / ❌ GAGAL) beserta pemutar video HTML5 MP4 yang siap diputar.
-
----
-
-## 5. Arsitektur dan Teknologi (Tech Stack)
-
-* **Bahasa Pemrograman:** Python 3.12
-* **Web Framework:** FastAPI (v0.110.0)
-* **Frontend Dynamic Engine:** HTMX (v1.9.10) — Menggantikan logika JavaScript kompleks dengan *HTML Fragments*.
-* **Templating Engine:** Jinja2 (v3.1.3)
-* **CSS Framework:** Tailwind CSS (via CDN)
-* **Automation Engine:** Playwright for Python (v1.42.0)
-* **Video Converter:** FFmpeg CLI (System Level Dependency)
-* **Database Engine:** SQLite
-* **Database Driver & ORM:** SQLAlchemy (v2.0+) Async Session (`aiosqlite`) dengan konfigurasi `expire_on_commit=False`.
-
----
-
-## 6. Model Data Inti (Core Data Model)
-
-### 1. Tabel `command_definitions` (Master Katalog Perintah)
-| Kolom | Tipe Data | Keterangan |
+| Header UT | Tipe Field DB | Logika Data di Excel (Fallback Rule) |
 | :--- | :--- | :--- |
-| `id` | Integer (PK) | Primary Key. |
-| `code` | String (Unique) | Kode unik perintah, misal: `GOTO_URL`, `CLICK`, `SCROLL_RIGHT`. |
-| `label` | String | Nama terpisah untuk UI, misal: "Gulir ke Kanan". |
-| `description` | String | Penjelasan singkat fungsi perintah. |
-| `requires_selector` | Boolean | Menandakan apakah perintah butuh Target Selector (CSS/ID). |
-| `requires_value` | Boolean | Menandakan apakah perintah butuh Input Value. |
-| `placeholder_selector`| String | Petunjuk contoh selector di UI. |
-| `placeholder_value` | String | Petunjuk contoh nilai input di UI. |
-
-### 2. Tabel `test_cases` (Skenario Pengujian)
-| Kolom | Tipe Data | Keterangan |
-| :--- | :--- | :--- |
-| `id` | Integer (PK) | Primary Key. |
-| `name` | String | Nama Skenario Tes. |
-| `base_url` | String | URL Dasar target pengujian. |
-| `created_at` | DateTime | Waktu pembuatan skenario. |
-
-### 3. Tabel `test_steps` (Langkah Pengujian Sekuensial)
-| Kolom | Tipe Data | Keterangan |
-| :--- | :--- | :--- |
-| `id` | Integer (PK) | Primary Key. |
-| `test_case_id` | Foreign Key | Merujuk ke `test_cases.id`. |
-| `step_order` | Integer | Nomor urut eksekusi (1, 2, 3, dst). |
-| `command` | String | Kode perintah Playwright (merujuk ke `command_definitions.code`). |
-| `target_selector` | String | Alamat elemen HTML target (opsional). |
-| `input_value` | String | Nilai parameter/input teks (opsional). |
-
-### 4. Tabel `test_runs` (Riwayat Eksekusi Tes)
-| Kolom | Tipe Data | Keterangan |
-| :--- | :--- | :--- |
-| `id` | String (PK) | ID Unik Eksekusi, contoh: `RUN-23746E83`. |
-| `test_case_id` | Foreign Key | Merujuk ke `test_cases.id`. |
-| `status` | String | Status eksekusi (`PENDING`, `RUNNING`, `SUCCESS`, `FAILED`). |
-| `video_url` | String | Path URL relatif file video MP4 hasil rekaman. |
-| `error_log` | String | Catatan pesan error jika pengujian gagal. |
-| `executed_at` | DateTime | Waktu eksekusi pengujian. |
+| **Case ID** | Auto Index | Urutan angka numerik sederhana: `1`, `2`, `3`, ... berdasarkan *loop index* saat pengujian diekspor. |
+| **Theme** | `ut_theme` *(Opsional)* | 1. Teks manual `ut_theme`<br>2. *Fallback:* Nama Proyek (`Project.name`) |
+| **Function name** | `ut_function_name` *(Opsional)* | 1. Teks manual `ut_function_name`<br>2. *Fallback:* Nama Skenario (`TestCase.name`) |
+| **Action** | `ut_action` *(Opsional)* | 1. Teks manual `ut_action`<br>2. *Fallback:* Deskripsi/aksi dari langkah pertama (`TestStep` order #1) |
+| **Condition 1** | `ut_condition_1` *(Opsional)* | 1. Teks manual `ut_condition_1`<br>2. *Fallback:* `TestCase.base_url` |
+| **Condition 2** | `ut_condition_2` *(Opsional)* | 1. Teks manual `ut_condition_2`<br>2. *Fallback:* `"-"` |
+| **Case classification** | `ut_classification` *(Opsional)* | 1. Teks manual `ut_classification`<br>2. *Fallback:* `"Normal"` |
+| **How to test** | `ut_how_to_test` *(Opsional)* | 1. Teks manual `ut_how_to_test`<br>2. *Fallback:* Kompilasi otomatis dari seluruh daftar `TestStep` (e.g., `1. GOTO_URL /login\n2. TYPE_TEXT admin`) |
+| **Expected results** | `ut_expected_results` *(Opsional)* | 1. Teks manual `ut_expected_results`<br>2. *Fallback:* Kompilasi otomatis dari langkah bermuatan `VERIFY_*` |
 
 ---
 
-## 7. Katalog Perintah Terdaftar di Engine (`app/handlers.py`)
+## 3. Database Entity Schema Architecture
 
-1. **`GOTO_URL`**: Membuka URL utama atau relative path (misal: `/user/profile`).
-2. **`CLICK`**: Mengklik elemen target berdasarkan CSS/ID/Text.
-3. **`DOUBLE_CLICK`**: Melakukan klik ganda pada elemen target.
-4. **`RIGHT_CLICK`**: Melakukan klik kanan pada elemen target.
-5. **`TYPE_TEXT`**: Mengisi formulir teks.
-6. **`PRESS_KEY`**: Menekan tombol khusus keyboard (Enter, Tab, Escape).
-7. **`HOVER`**: Mengarahkan kursor mouse ke elemen target.
-8. **`SELECT_OPTION`**: Memilih opsi pada elemen dropdown `<select>`.
-9. **`SCROLL_RIGHT`**: Menggulir kontainer spesifik atau layar ke kanan (sejumlah piksel, misal: `300`).
-10. **`SCROLL_DOWN`**: Menggulir kontainer spesifik atau layar ke bawah (sejumlah piksel, misal: `500`).
-11. **`WAIT`**: Menunda eksekusi selama beberapa detik.
-12. **`VERIFY_TEXT`**: Memastikan teks tertentu terdapat pada elemen target.
+### 3.1. Entity Relationship Diagram (Conceptual)
+* **`Project`** `1` ──── `N` **`TestCase`** *(On Delete: CASCADE)*
+* **`TestCase`** `1` ──── `N` **`TestStep`** *(On Delete: CASCADE)*
+* **`TestCase`** `1` ──── `N` **`TestRun`** *(On Delete: CASCADE)*
+* **`CommandDefinition`** *(Master Registry Data Perintah Playwright)*
+
+### 3.2. Data Dictionary
+
+#### A. Master `projects` Table
+| Column Name | Data Type | Constraints | Description |
+| :--- | :--- | :--- | :--- |
+| `id` | Integer | PK, Auto-increment | ID Unik Proyek |
+| `name` | String(100) | Not Null, Unique | Nama Proyek (e.g., *HRIS Portal*) |
+| `description` | Text | Nullable | Deskripsi cakupan proyek |
+| `created_at` | DateTime | Default UTC | Waktu pembuatan |
+
+#### B. `test_cases` Table (Updated)
+| Column Name | Data Type | Constraints | Description |
+| :--- | :--- | :--- | :--- |
+| `id` | Integer | PK, Auto-increment | ID Unik Skenario |
+| `project_id` | Integer | FK (`projects.id`), OnDelete CASCADE | ID Proyek Induk |
+| `name` | String(100) | Not Null | Nama Skenario Pengujian |
+| `base_url` | String(255) | Not Null | Target URL Utama |
+| `test_type` | String(30) | Default: `REGRESSION` | `CHANGE_REQUEST`, `REGRESSION`, `NEW_FEATURE`, `HOTFIX` |
+| `reference_number`| String(50) | Nullable | Nomor Identifikasi CR/Jira (e.g., *CR-2026-004*) |
+| **UT Document Optional Fields** | | | |
+| `ut_theme` | String(100) | Nullable | Manual Theme |
+| `ut_function_name`| String(100) | Nullable | Manual Function Name |
+| `ut_action` | Text | Nullable | Manual Action Description |
+| `ut_condition_1` | Text | Nullable | Manual Condition 1 |
+| `ut_condition_2` | Text | Nullable | Manual Condition 2 |
+| `ut_classification`| String(50) | Nullable | Manual Classification (`Normal`, `Abnormal`, `Boundary`) |
+| `ut_how_to_test` | Text | Nullable | Manual Steps Description |
+| `ut_expected_results`| Text | Nullable | Manual Expected Results |
+| `created_at` | DateTime | Default UTC | Waktu Pembuatan |
+
+#### C. `test_steps` Table
+| Column Name | Data Type | Constraints | Description |
+| :--- | :--- | :--- | :--- |
+| `id` | Integer | PK, Auto-increment | ID Langkah |
+| `test_case_id` | Integer | FK (`test_cases.id`), OnDelete CASCADE | ID Skenario Induk |
+| `step_order` | Integer | Not Null | Urutan Langkah (1, 2, 3...) |
+| `command` | String(50) | Not Null | Kode Perintah Playwright (e.g., `CLICK`, `TYPE_TEXT`) |
+| `target_selector` | String(255) | Nullable | CSS/ID Selector |
+| `input_value` | Text | Nullable | Nilai Input / Parameter |
+
+#### D. `test_runs` Table
+| Column Name | Data Type | Constraints | Description |
+| :--- | :--- | :--- | :--- |
+| `id` | String(50) | PK | UUID Run ID (e.g., `RUN-A5AE6B82`) |
+| `test_case_id` | Integer | FK (`test_cases.id`), OnDelete CASCADE | ID Skenario |
+| `status` | String(20) | Default: `PENDING` | `PENDING`, `RUNNING`, `SUCCESS`, `FAILED` |
+| `video_url` | String(255) | Nullable | Relative Path Rekaman MP4 |
+| `error_log` | Text | Nullable | Detail Error Traceback jika Failed |
+| `executed_at` | DateTime | Default UTC | Waktu Eksekusi |
 
 ---
 
-## 8. Lingkungan & Batasan Sistem (Environment & Constraints)
+## 4. System Functional Requirements
 
-* **Deployment Environment:** Dijalankan secara lokal di PC remote kantor (distribusi Linux berbasis Arch / CachyOS / Ubuntu).
-* **Dependensi Sistem Wajib:**
-  * Virtual Environment Python 3.12 (`.venv`).
-  * Binary Browser Chromium Playwright (`playwright install chromium`).
-  * FFmpeg CLI Tool (`sudo apt install ffmpeg` / `sudo pacman -S ffmpeg`).
-* **Manajemen Penyimpanan:** Administrator PC lokal disarankan melakukan pembersihan rutin pada folder `static/videos/` secara berkala untuk menjaga kapasitas media penyimpanan fisik.
+### FR-1: Management Proyek & Seeder Default
+* Sistem secara otomatis menjalankan *seeder* saat inisialisasi (`init_db.py`) untuk menjamin minimal ada 1 proyek bawaan: **"Default Project"**.
+* Pengguna dapat membuat proyek baru via modal/form UI.
+* Jika proyek dihapus, seluruh skenario (`test_cases`) di bawahnya akan terhapus otomatis (*Cascade Delete*).
+
+### FR-2: Pengelompokan & Filter Skenario Berdasarkan Proyek & CR
+* Pengguna dapat memfilter tampilan daftar skenario di Dashboard berdasarkan **Proyek** atau **Tipe Pengujian (Change Request)**.
+* Nomor Referensi CR bersifat **opsional** untuk seluruh tipe pengujian.
+* Setiap kartu skenario di UI akan menampilkan badge visual penanda status CR/Tipe pengujian (misal: Badge Biru `CR-2026-004`).
+
+### FR-3: Editor Langkah Skenario Inline (HTMX)
+* Dukungan penambahan, pembaruan (*inline edit* tanpa reload), dan penghapusan langkah pengujian (`TestStep`) secara interaktif.
+* Urutan langkah (`step_order`) disesuaikan secara otomatis jika ada langkah yang dihapus di tengah urutan.
+
+### FR-4: Eksekusi Async Cross-Platform & Streaming Bukti Pengujian
+* Eksekusi browser Playwright berjalan di latar belakang (*background task*).
+* Untuk OS Windows, eksekusi diisolasi di dalam `ThreadPoolExecutor` dengan `WindowsProactorEventLoopPolicy` guna mencegah `NotImplementedError`.
+* Hasil pengujian merekam video web browser yang dikonversi ke format `.mp4` menggunakan FFmpeg dan ditayangkan melalui HTTP 206 Partial Content Streaming.
+* Tangkapan layar (*full-page screenshot*) dari perintah `TAKE_SCREENSHOT_FULL` disimpan di `static/screenshots/`.
+
+### FR-5: Modul Ekspor Laporan UT Document Matrix (`.xlsx`)
+* Menyediakan endpoint ekspor yang menghasilkan berkas Excel `.xlsx` menggunakan `openpyxl`.
+* Menerapkan logika *Hybrid Fallback* untuk mengisi 9 kolom header UT Document.
+* Menyediakan baris tambahan berisi hasil aktual (`PASS`/`FAIL`) serta tautan bukti (*evidence*) video/screenshot dari hasil eksekusi terakhir.
+
+---
+
+## 5. Directory & Package Architecture (FastAPI Best Practices)
+
+```text
+qa_webapp/
+├── app/
+│   ├── api/
+│   │   ├── deps.py                 # Dependency Injection (get_db)
+│   │   └── v1/
+│   │       ├── dashboard.py        # Router Dashboard, Project & Skenario HTMX
+│   │       ├── export.py           # Router Ekspor Laporan UT Matrix Excel
+│   │       └── media.py            # Router Streaming Video HTTP 206
+│   ├── core/
+│   │   ├── config.py               # Pydantic BaseSettings
+│   │   └── database.py             # SQLAlchemy Async Engine & Session
+│   ├── engine/
+│   │   ├── executor.py             # Playwright Executor & Thread Pool Isolation
+│   │   └── handlers.py             # Playwright Command Registries
+│   ├── models/
+│   │   └── models.py               # SQLAlchemy ORM Models (Project, TestCase, dll.)
+│   ├── schemas/
+│   │   └── schemas.py              # Pydantic Schemas (DTO)
+│   ├── services/
+│   │   └── export_service.py       # Logika Penyusunan Document UT & OpenPyXL Generator
+│   ├── seeders.py                  # Seeder Master Command & Default Project
+│   └── main.py                     # Minimalist Entrypoint
+├── static/
+│   ├── videos/                     # Output Rekaman Video (.mp4)
+│   └── screenshots/                # Output Screenshots (.png)
+├── templates/
+│   ├── index.html                  # Main Layout & Project Filter
+│   └── partials/
+│       ├── project_modal.html      # Modal Buat Proyek Baru
+│       ├── right_panel.html        # Detail Skenario & Form Metadata UT (Collapsible)
+│       ├── step_list.html          # Tabel Steps dengan Action Edit & Delete
+│       ├── step_edit_form.html     # Inline Edit Form Step
+│       └── status.html             # Video Player & Execution Status
+├── init_db.py                      # Database Initialization & Seeding Runner
+├── .gitignore
+├── requirements.txt
+└── prd.md                          # Product Requirement Document

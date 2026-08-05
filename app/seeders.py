@@ -1,6 +1,6 @@
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
-from app.models.models import CommandDefinition
+from app.models.models import CommandDefinition, Project
 
 INITIAL_COMMANDS = [
     {
@@ -119,7 +119,29 @@ INITIAL_COMMANDS = [
     }
 ]
 
+
+async def seed_default_project(db: AsyncSession) -> Project:
+    """Menjamin tersedianya proyek bawaan (Default Project) di database."""
+    result = await db.execute(select(Project).where(Project.name == "Default Project"))
+    project = result.scalar_one_or_none()
+    
+    if not project:
+        project = Project(
+            name="Default Project",
+            description="Proyek bawaan sistem untuk skenario yang tidak dikaitkan dengan proyek spesifik."
+        )
+        db.add(project)
+        await db.commit()
+        await db.refresh(project)
+        print("✅ Default Project berhasil dibuat.")
+    else:
+        print("ℹ️ Default Project sudah tersedia.")
+        
+    return project
+
+
 async def seed_commands(db: AsyncSession) -> int:
+    """Menyimpan master data perintah Playwright ke database."""
     added_count = 0
     for cmd_data in INITIAL_COMMANDS:
         result = await db.execute(
@@ -128,6 +150,7 @@ async def seed_commands(db: AsyncSession) -> int:
         if not result.scalar_one_or_none():
             db.add(CommandDefinition(**cmd_data))
             added_count += 1
+            
     if added_count > 0:
         await db.commit()
     return added_count

@@ -1,7 +1,22 @@
 from datetime import datetime
+from typing import Optional
 from sqlalchemy import String, Text, Integer, ForeignKey, DateTime, Boolean
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from app.core.database import Base
+
+
+class Project(Base):
+    __tablename__ = "projects"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
+    name: Mapped[str] = mapped_column(String(100), unique=True, nullable=False)
+    description: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+
+    test_cases: Mapped[list["TestCase"]] = relationship(
+        "TestCase", back_populates="project", cascade="all, delete-orphan"
+    )
+
 
 class CommandDefinition(Base):
     __tablename__ = "command_definitions"
@@ -9,43 +24,71 @@ class CommandDefinition(Base):
     id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
     code: Mapped[str] = mapped_column(String(50), unique=True, index=True, nullable=False)
     label: Mapped[str] = mapped_column(String(100), nullable=False)
-    description: Mapped[str] = mapped_column(Text, nullable=True)
+    description: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     requires_selector: Mapped[bool] = mapped_column(Boolean, default=False)
     requires_value: Mapped[bool] = mapped_column(Boolean, default=False)
-    placeholder_selector: Mapped[str] = mapped_column(String(100), nullable=True)
-    placeholder_value: Mapped[str] = mapped_column(String(100), nullable=True)
+    placeholder_selector: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
+    placeholder_value: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
+
 
 class TestCase(Base):
     __tablename__ = "test_cases"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
+    project_id: Mapped[int] = mapped_column(
+        ForeignKey("projects.id", ondelete="CASCADE"), nullable=False
+    )
     name: Mapped[str] = mapped_column(String(100), nullable=False)
     base_url: Mapped[str] = mapped_column(String(255), nullable=False)
+    test_type: Mapped[str] = mapped_column(String(30), default="REGRESSION")
+    reference_number: Mapped[Optional[str]] = mapped_column(String(50), nullable=True)
+
+    # UT Document Optional Fields (Hybrid Fallback System)
+    ut_theme: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
+    ut_function_name: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
+    ut_action: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    ut_condition_1: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    ut_condition_2: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    ut_classification: Mapped[Optional[str]] = mapped_column(String(50), nullable=True)
+    ut_how_to_test: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    ut_expected_results: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
 
-    steps: Mapped[list["TestStep"]] = relationship("TestStep", back_populates="test_case", cascade="all, delete-orphan")
-    runs: Mapped[list["TestRun"]] = relationship("TestRun", back_populates="test_case", cascade="all, delete-orphan")
+    project: Mapped["Project"] = relationship("Project", back_populates="test_cases")
+    steps: Mapped[list["TestStep"]] = relationship(
+        "TestStep", back_populates="test_case", cascade="all, delete-orphan"
+    )
+    runs: Mapped[list["TestRun"]] = relationship(
+        "TestRun", back_populates="test_case", cascade="all, delete-orphan"
+    )
+
 
 class TestStep(Base):
     __tablename__ = "test_steps"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
-    test_case_id: Mapped[int] = mapped_column(ForeignKey("test_cases.id", ondelete="CASCADE"), nullable=False)
+    test_case_id: Mapped[int] = mapped_column(
+        ForeignKey("test_cases.id", ondelete="CASCADE"), nullable=False
+    )
     step_order: Mapped[int] = mapped_column(Integer, nullable=False)
     command: Mapped[str] = mapped_column(String(50), nullable=False)
-    target_selector: Mapped[str] = mapped_column(String(255), nullable=True)
-    input_value: Mapped[str] = mapped_column(Text, nullable=True)
+    target_selector: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
+    input_value: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
 
     test_case: Mapped["TestCase"] = relationship("TestCase", back_populates="steps")
+
 
 class TestRun(Base):
     __tablename__ = "test_runs"
 
     id: Mapped[str] = mapped_column(String(50), primary_key=True, index=True)
-    test_case_id: Mapped[int] = mapped_column(ForeignKey("test_cases.id", ondelete="CASCADE"), nullable=False)
+    test_case_id: Mapped[int] = mapped_column(
+        ForeignKey("test_cases.id", ondelete="CASCADE"), nullable=False
+    )
     status: Mapped[str] = mapped_column(String(20), default="PENDING")
-    video_url: Mapped[str] = mapped_column(String(255), nullable=True)
-    error_log: Mapped[str] = mapped_column(Text, nullable=True)
+    video_url: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
+    error_log: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     executed_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
 
     test_case: Mapped["TestCase"] = relationship("TestCase", back_populates="runs")

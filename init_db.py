@@ -1,21 +1,22 @@
 import asyncio
 from app.core.database import engine, Base, SessionLocal
-from app.seeders import seed_commands
+from app.seeders import seed_commands, seed_default_project
+
 
 async def init_db():
-    """
-    Script utama untuk inisialisasi tabel database dan pemanggilan seeder modular.
-    """
-    print("🔄 Membangun struktur tabel database SQLite...")
+    print("🔄 Membangun ulang struktur tabel database SQLite...")
     async with engine.begin() as conn:
+        # Menghapus tabel lama & membuat struktur tabel baru
+        await conn.run_sync(Base.metadata.drop_all)
         await conn.run_sync(Base.metadata.create_all)
-    print("✅ Tabel database berhasil diperbarui/dibuat!")
+    print("✅ Tabel database baru berhasil dibangun!")
 
     print("\n🌱 Menjalankan Seeder Data Master...")
     async with SessionLocal() as db:
-        await seed_commands(db)
+        await seed_default_project(db)
+        added_cmds = await seed_commands(db)
+        print(f"✅ Seeder selesai! ({added_cmds} perintah master ditambahkan).")
 
-    print("\n🎉 Proses inisialisasi database dan seeding selesai sempurna!")
 
 if __name__ == "__main__":
     asyncio.run(init_db())
