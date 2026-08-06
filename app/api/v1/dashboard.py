@@ -1,5 +1,6 @@
 import json
 import uuid
+import os
 from typing import Optional
 from fastapi import APIRouter, Request, BackgroundTasks, Depends, Form
 from fastapi.templating import Jinja2Templates
@@ -11,6 +12,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.api.deps import get_db
 from app.models.models import TestCase, TestStep, TestRun, CommandDefinition, Project
 from app.engine.executor import run_test_scenario
+from fastapi.responses import StreamingResponse
+from app.services.export_service import generate_ut_matrix_excel
 
 router = APIRouter(tags=["Dashboard"])
 templates = Jinja2Templates(directory="templates")

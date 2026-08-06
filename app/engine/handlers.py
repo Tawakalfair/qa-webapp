@@ -4,7 +4,7 @@ from typing import Any
 from playwright.async_api import Page
 
 
-async def execute_single_command(page: Page, step: Any, base_url: str):
+async def execute_single_command(page: Page, step: Any, base_url: str, run_id: str = "DEFAULT"):
     """
     Penerjemah dan eksekutor untuk setiap jenis perintah Playwright.
     """
@@ -27,7 +27,13 @@ async def execute_single_command(page: Page, step: Any, base_url: str):
     elif cmd == "CLICK":
         if not selector:
             raise ValueError("Perintah CLICK membutuhkan target_selector.")
-        await page.click(selector, timeout=10000)
+        
+        try:
+            # 1. Coba klik standar
+            await page.click(selector, timeout=3000)
+        except Exception:
+            # 2. Jika tertutup lapisan transparan, paksa klik lewat JavaScript DOM
+            await page.eval_on_selector(selector, "el => el.click()")
 
     elif cmd == "DOUBLE_CLICK":
         if not selector:
@@ -42,7 +48,24 @@ async def execute_single_command(page: Page, step: Any, base_url: str):
     elif cmd == "TYPE_TEXT":
         if not selector:
             raise ValueError("Perintah TYPE_TEXT membutuhkan target_selector.")
-        await page.fill(selector, val or "", timeout=10000)
+        
+        try:
+            # 1. PAKSA FOKUS ke elemen lewat JavaScript (Menembus invisible overlay Google)
+            await page.eval_on_selector(selector, "el => { el.focus(); el.click(); }")
+            
+            # 2. Ketik langsung lewat Keyboard Browser ke elemen yang sedang fokus
+            await page.keyboard.type(val or "", delay=30)
+        except Exception:
+            # 3. Fallback Ekstrem: Suntikkan teks langsung ke atribut 'value' HTML
+            await page.eval_on_selector(
+                selector,
+                """(el, text) => {
+                    el.value = text;
+                    el.dispatchEvent(new Event('input', { bubbles: true }));
+                    el.dispatchEvent(new Event('change', { bubbles: true }));
+                }""",
+                val or ""
+            )
 
     elif cmd == "CLEAR_TEXT":
         if not selector:
@@ -98,7 +121,8 @@ async def execute_single_command(page: Page, step: Any, base_url: str):
     elif cmd == "TAKE_SCREENSHOT_FULL":
         screenshot_dir = os.path.join("static", "screenshots")
         os.makedirs(screenshot_dir, exist_ok=True)
-        filename = val if (val and val.endswith(".png")) else f"screenshot_step_{step.step_order}.png"
+        # Penamaan file terstruktur: RUN_ID + STEP_ORDER
+        filename = f"{run_id}_step_{step.step_order}.png"
         filepath = os.path.join(screenshot_dir, filename)
         await page.screenshot(path=filepath, full_page=True)
 

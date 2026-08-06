@@ -17,7 +17,8 @@ async def execute_steps_recursively(
     page, 
     case_id: int, 
     visited_cases: Set[int], 
-    base_url: str
+    base_url: str,
+    run_id: str
 ):
     if case_id in visited_cases:
         raise ValueError(
@@ -43,10 +44,7 @@ async def execute_steps_recursively(
     for step in sorted_steps:
         if step.command == "INCLUDE_SCENARIO":
             if not step.input_value or not step.input_value.strip().isdigit():
-                raise ValueError(
-                    f"Perintah INCLUDE_SCENARIO pada Langkah #{step.step_order} "
-                    f"memerlukan ID Skenario Target yang valid."
-                )
+                raise ValueError("INCLUDE_SCENARIO membutuhkan ID Skenario Target.")
             
             target_case_id = int(step.input_value.strip())
             await execute_steps_recursively(
@@ -54,10 +52,11 @@ async def execute_steps_recursively(
                 page=page,
                 case_id=target_case_id,
                 visited_cases=current_visited,
-                base_url=base_url
+                base_url=base_url,
+                run_id=run_id
             )
         else:
-            await execute_single_command(page, step, base_url)
+            await execute_single_command(page, step, base_url, run_id=run_id)
 
 
 async def _async_run_test_scenario(run_id: str, case_id: int):
@@ -109,7 +108,8 @@ async def _async_run_test_scenario(run_id: str, case_id: int):
                         page=page,
                         case_id=case_id,
                         visited_cases=set(),
-                        base_url=main_case.base_url
+                        base_url=main_case.base_url,
+                        run_id=run_id
                     ),
                     timeout=60.0
                 )

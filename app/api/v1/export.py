@@ -1,3 +1,4 @@
+import os
 from typing import Optional
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import StreamingResponse
@@ -18,7 +19,7 @@ async def export_ut_matrix(
     db: AsyncSession = Depends(get_db)
 ):
     """
-    Endpoint untuk mendownload Laporan UT Document Matrix dalam format Excel (.xlsx).
+    Endpoint untuk mendownload Laporan UT Document Matrix & Evidence dalam format Excel (.xlsx).
     Dapat difilter berdasarkan project_id tertentu atau mengekspor seluruh proyek.
     """
     query = select(TestCase).options(
@@ -43,7 +44,18 @@ async def export_ut_matrix(
     if not test_cases:
         raise HTTPException(status_code=400, detail="Tidak ada data skenario pengujian untuk diekspor.")
 
-    excel_stream = generate_ut_matrix_excel(test_cases, project_name=project_name)
+    # 1. Panggil service yang mengembalikan (stream_buffer, daftar_file_yang_harus_dihapus)
+    excel_stream, screenshots_to_delete = generate_ut_matrix_excel(test_cases, project_name=project_name)
+
+    # 2. HOUSEKEEPING / CLEANUP:
+    # Hapus gambar fisik di folder static/screenshots karena sudah permanen masuk ke dalam Excel
+    for filepath in screenshots_to_delete:
+        if os.path.exists(filepath):
+            try:
+                os.remove(filepath)
+            except Exception as e:
+                print(f"[Cleanup Warning] Gagal menghapus file {filepath}: {e}")
+
     filename = f"UT_Document_Matrix_{project_name}.xlsx"
 
     return StreamingResponse(

@@ -1,6 +1,8 @@
+import os
 from io import BytesIO
 from openpyxl import Workbook
 from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
+from openpyxl.drawing.image import Image as OpenPyxlImage
 from app.models.models import TestCase
 
 
@@ -29,7 +31,6 @@ def compile_how_to_test(tc: TestCase, visited_ids: set = None) -> str:
 
     for s in sorted_steps:
         if s.command == "INCLUDE_SCENARIO" and s.input_value and s.input_value.strip().isdigit():
-            # Jika sub-skenario diload via ORM
             sub_id = int(s.input_value.strip())
             step_lines.append(f"{s.step_order}. [SUB-SCENARIO #{sub_id}]")
         else:
@@ -43,8 +44,20 @@ def compile_how_to_test(tc: TestCase, visited_ids: set = None) -> str:
     return "\n".join(step_lines)
 
 
-def generate_ut_matrix_excel(test_cases: list[TestCase], project_name: str = "All Projects") -> BytesIO:
+def generate_ut_matrix_excel(test_cases: list[TestCase], project_name: str = "All Projects") -> tuple[BytesIO, list[str]]:
+    """
+    Menghasilkan berkas Excel berisi:
+    1. Sheet 'UT Document Matrix' (Menggunakan logika bawaan Anda)
+    2. Sheet untuk tiap urutan Skenario ("1", "2", "3", dst) yang berisi baris langkah (Kuning) 
+       serta Evidence Screenshot (57 cm x 32 cm).
+    
+    Mengembalikan tuple: (stream_excel_buffer, daftar_file_screenshot_untuk_dihapus)
+    """
     wb = Workbook()
+    
+    # ---------------------------------------------------------
+    # 1. SHEET UT UTAMA: "UT Document Matrix"
+    # ---------------------------------------------------------
     ws = wb.active
     ws.title = "UT Document Matrix"
     
@@ -57,6 +70,10 @@ def generate_ut_matrix_excel(test_cases: list[TestCase], project_name: str = "Al
     
     status_fail_fill = PatternFill(start_color="FCE4D6", end_color="FCE4D6", fill_type="solid")
     status_fail_font = Font(name="Calibri", size=10, bold=True, color="C65911")
+
+    # Style Tambahan untuk Sheet Evidence
+    step_yellow_fill = PatternFill(start_color="FFFF00", end_color="FFFF00", fill_type="solid")
+    step_header_font = Font(name="Calibri", size=11, bold=True, color="000000")
 
     thin_border = Border(
         left=Side(style="thin", color="BFBFBF"),
@@ -90,6 +107,11 @@ def generate_ut_matrix_excel(test_cases: list[TestCase], project_name: str = "Al
     
     ws.row_dimensions[1].height = 28
 
+    screenshots_to_cleanup: list[str] = []
+
+    # ---------------------------------------------------------
+    # 2. POPULASI DATA MATRIX & PENAMBAHAN SHEET EVIDENCE
+    # ---------------------------------------------------------
     for idx, tc in enumerate(test_cases, start=1):
         case_id = str(idx)
         theme = tc.ut_theme if (tc.ut_theme and tc.ut_theme.strip()) else (tc.project.name if tc.project else "-")
@@ -110,7 +132,6 @@ def generate_ut_matrix_excel(test_cases: list[TestCase], project_name: str = "Al
         classification = tc.ut_classification if (tc.ut_classification and tc.ut_classification.strip()) else "Normal"
         function_name = tc.ut_function_name if (tc.ut_function_name and tc.ut_function_name.strip()) else tc.name
 
-        # Menggunakan kompilasi rekursif
         how_to_test = compile_how_to_test(tc)
 
         if tc.ut_expected_results and tc.ut_expected_results.strip():
@@ -125,7 +146,10 @@ def generate_ut_matrix_excel(test_cases: list[TestCase], project_name: str = "Al
         else:
             expected_results = "-"
 
-        last_run = sorted(tc.runs, key=lambda r: r.executed_at, reverse=True)[0] if tc.runs else None
+        # Ambil TestRun terakhir
+        runs_sorted = sorted(tc.runs, key=lambda r: getattr(r, 'executed_at', getattr(r, 'created_at', None)), reverse=True) if tc.runs else []
+        last_run = runs_sorted[0] if runs_sorted else None
+        
         last_status = last_run.status if last_run else "UNTESTED"
         error_log = last_run.error_log if (last_run and last_run.error_log) else "-"
 
@@ -157,6 +181,78 @@ def generate_ut_matrix_excel(test_cases: list[TestCase], project_name: str = "Al
             status_cell.fill = status_fail_fill
             status_cell.font = status_fail_font
 
+# ---------------------------------------------------------
+        # 3. SHEET EVIDENCE (HANYA MENAMPILKAN LANGKAH YANG ADA SCREENSHOT-NYA)
+        # ---------------------------------------------------------
+        ws_scen = wb.create_sheet(title=str(idx))
+        ws_scen.column_dimensions['A'].width = 120
+
+        scen_row = 1
+
+        # Title Skenario
+        ws_scen.cell(row=scen_row, column=1, value=f"SKENARIO #{idx}: {tc.name}").font = Font(name="Calibri", size=14, bold=True)
+        scen_row += 1
+        ws_scen.cell(row=scen_row, column=1, value=f"Base URL: {tc.base_url} | Status Terakhir: {last_status}").font = Font(name="Calibri", size=10, italic=True, color="595959")
+        scen_row += 2
+
+        evidence_count = 0  # Penghitung jumlah evidence yang berhasil dimasukkan
+
+        if tc.steps:
+            sorted_tc_steps = sorted(tc.steps, key=lambda s: s.step_order)
+            for step in sorted_tc_steps:
+                # 1. CEK DULU KETERSEDIAAN FILE SCREENSHOT
+                img_path = None
+                if last_run:
+                    possible_path = os.path.join("static", "screenshots", f"{last_run.id}_step_{step.step_order}.png")
+                    if os.path.exists(possible_path):
+                        img_path = possible_path
+
+                # 2. JIKA GAMBAR TIDAK ADA, LANGSUNG SKIP TOTAL (JANGAN TULIS BARIS KUNING)
+                if not img_path or not os.path.exists(img_path):
+                    continue
+
+                # --- JIKA GAMBAR ADA, BARU TULIS BARIS KUNING & TEMPEL GAMBAR ---
+                evidence_count += 1
+
+                step_text = f"Langkah #{step.step_order}: [{step.command}]"
+                if step.target_selector:
+                    step_text += f" Target: {step.target_selector}"
+                if step.input_value:
+                    step_text += f" | Value: '{step.input_value}'"
+
+                # WARNAI SELURUH CELL A S/D K (KOLOM 1-11)
+                for col_idx in range(1, 12):
+                    cell = ws_scen.cell(row=scen_row, column=col_idx)
+                    cell.fill = step_yellow_fill
+                    cell.border = thin_border
+                    if col_idx == 1:
+                        cell.value = step_text
+                        cell.font = step_header_font
+
+                # MERGE CELL A S/D K
+                ws_scen.merge_cells(start_row=scen_row, start_column=1, end_row=scen_row, end_column=11)
+                ws_scen.row_dimensions[scen_row].height = 25
+                scen_row += 1
+
+                # SISIPKAN GAMBAR SCREENSHOT (57 cm x 32 cm)
+                try:
+                    img = OpenPyxlImage(img_path)
+                    img.width = int(57 * 37.795)   # ~2154 px
+                    img.height = int(32 * 37.795)  # ~1209 px
+
+                    ws_scen.add_image(img, f"A{scen_row}")
+                    screenshots_to_cleanup.append(img_path)
+
+                    scen_row += 62
+                except Exception as e:
+                    print(f"[Excel Export Image Error]: {e}")
+                    scen_row += 2
+
+        # 3. JIKA SAMA SEKALI TIDAK ADA EVIDENCE DI SKENARIO INI, BERIKAN CATATAN
+        if evidence_count == 0:
+            ws_scen.cell(row=scen_row, column=1, value="Tidak ada bukti screenshot yang diambil pada skenario ini.").font = Font(name="Calibri", size=11, italic=True, color="808080")
+
+    # Atur Lebar Kolom untuk Sheet Matrix Utama
     col_widths = {
         "A": 10, "B": 18, "C": 25, "D": 22, "E": 18,
         "F": 18, "G": 22, "H": 35, "I": 30, "J": 14, "K": 25
@@ -167,4 +263,4 @@ def generate_ut_matrix_excel(test_cases: list[TestCase], project_name: str = "Al
     stream = BytesIO()
     wb.save(stream)
     stream.seek(0)
-    return stream
+    return stream, screenshots_to_cleanup
