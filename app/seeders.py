@@ -122,6 +122,15 @@ INITIAL_COMMANDS = [
         "description": "Memastikan elemen HTML tampak di layar",
         "requires_selector": True, "requires_value": False,
         "placeholder_selector": "#dashboard-widget", "placeholder_value": "-"
+    },
+    {
+        "code": "ASSERT",
+        "label": "Verifikasi / Assert Expected Value",
+        "description": "Memeriksa teks, angka (< 0, > 10), warna (background is red), atau status elemen secara otomatis",
+        "requires_selector": True,  # ✅ DIPERBAIKI: Menggunakan requires_selector
+        "requires_value": True,
+        "placeholder_selector": "Misal: .stock-row atau #total-price",
+        "placeholder_value": "Misal: 15 / < 0 / background is red / disabled"
     }
 ]
 
@@ -147,13 +156,14 @@ async def seed_default_project(db: AsyncSession) -> Project:
 
 
 async def seed_commands(db: AsyncSession) -> int:
-    """Menyimpan master data perintah Playwright ke database."""
+    """Menyimpan master data perintah Playwright beserta seluruh metadatanya ke database."""
     added_count = 0
     for cmd_data in INITIAL_COMMANDS:
         result = await db.execute(
             select(CommandDefinition).where(CommandDefinition.code == cmd_data["code"])
         )
         if not result.scalar_one_or_none():
+            # Sekarang aman me-unpack seluruh metadata karena penamaan key sudah 100% cocok dengan model
             db.add(CommandDefinition(**cmd_data))
             added_count += 1
             

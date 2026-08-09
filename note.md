@@ -172,3 +172,12 @@ TYPE_TEXT: Mengisi kolom formulir teks.
 WAIT: Menunda eksekusi beberapa detik (misal: 3).
 
 VERIFY_TEXT: Memastikan teks tertentu hadir pada elemen target.
+
+ASSERT
+#csv info
+Target Selector,Nilai Input / Expected Value,Apa yang Diperiksa Mesin di Belakang Layar?
+.stock-cell,15,Memastikan teks pada elemen bernilai 15.
+.stock-row,background is red / bg-red,Memastikan elemen berlatar merah (via Class / CSS).
+#amount-field,< 0,Memastikan nilai angka di dalam elemen kurang dari 0.
+#status-badge,contains Sukses,"Memastikan teks mengandung kata ""Sukses""."
+#submit-btn,disabled,Memastikan tombol tidak bisa diklik.

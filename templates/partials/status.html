@@ -6,32 +6,60 @@
         <strong>⚙️ Status: {{ run.status }}</strong> - Sedang mengeksekusi mesin Playwright...
     </div>
 
-{% elif run.status == 'SUCCESS' %}
-    <div class="p-4 rounded-xl border bg-green-50 text-green-800 mt-4 mb-4">
-        <strong>✅ LULUS!</strong> Pengujian selesai tanpa kendala.
-    </div>
-    {% if run.video_url %}
-    <div class="bg-slate-950 p-4 rounded-2xl shadow-inner">
-        <h4 class="text-xs font-bold text-slate-400 uppercase tracking-wider mb-2">Rekaman Pengujian (.mp4):</h4>
-        <video controls autoplay muted playsinline class="w-full rounded-xl border border-slate-800">
-            <source src="{{ run.video_url }}" type="video/mp4">
-            Browser Anda tidak mendukung pemutar video HTML5.
-        </video>
-    </div>
+{% else %}
+    <!-- INDIKATOR STATUS (SUCCESS / FAILED) -->
+    {% if run.status == 'SUCCESS' %}
+        <div class="p-4 rounded-xl border bg-green-50 text-green-800 mt-4 mb-4">
+            <strong>✅ LULUS!</strong> Pengujian selesai tanpa kendala.
+        </div>
+    {% else %}
+        <div class="p-4 rounded-xl border bg-red-50 text-red-800 mt-4 mb-4">
+            <strong>❌ GAGAL:</strong> Skenario terhenti.
+            <pre class="mt-2 text-xs font-mono bg-white/50 p-2 rounded overflow-auto max-h-60 leading-relaxed">{{ run.error_log }}</pre>
+        </div>
     {% endif %}
 
-{% else %}
-    <div class="p-4 rounded-xl border bg-red-50 text-red-800 mt-4 mb-4">
-        <strong>❌ GAGAL:</strong> Skenario terhenti.
-        <pre class="mt-2 text-xs font-mono bg-white/50 p-2 rounded overflow-auto">{{ run.error_log }}</pre>
-    </div>
+    <!-- PEMUTAR VIDEO & TOOLBAR AKSI (TAMPIL PADA SUCCESS & FAILED) -->
     {% if run.video_url %}
-    <div class="bg-slate-950 p-4 rounded-2xl shadow-inner">
-        <h4 class="text-xs font-bold text-slate-400 uppercase tracking-wider mb-2">Rekaman Pengujian (.mp4):</h4>
-        <video controls muted playsinline class="w-full rounded-xl border border-slate-800">
+    <div class="bg-slate-950 p-4 rounded-2xl shadow-inner space-y-3">
+        <h4 class="text-xs font-bold text-slate-400 uppercase tracking-wider">Rekaman Pengujian (.mp4):</h4>
+        
+        <!-- Pemutar Video -->
+        <video controls muted playsinline class="w-full rounded-xl border border-slate-800 max-h-[360px]">
             <source src="{{ run.video_url }}" type="video/mp4">
             Browser Anda tidak mendukung pemutar video HTML5.
         </video>
+
+        <!-- Toolbar Aksi Video HTMX -->
+        <div id="video-action-container-{{ run.id }}" class="flex items-center justify-between gap-2 pt-2 border-t border-slate-800/80">
+            <div class="flex items-center gap-2">
+                <!-- Tombol Simpan Video -->
+                <button type="button"
+                        hx-post="/testrun/{{ run.id }}/keep-video"
+                        hx-target="#video-action-container-{{ run.id }}"
+                        hx-swap="outerHTML"
+                        class="px-3.5 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold transition-colors shadow-sm flex items-center gap-1.5 cursor-pointer">
+                    <span>💾</span> Simpan Video
+                </button>
+
+                <!-- Tombol Unduh Direct -->
+                <a href="/testrun/{{ run.id }}/download-video"
+                   target="_blank"
+                   class="px-3.5 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 rounded-xl text-xs font-bold transition-colors flex items-center gap-1.5 cursor-pointer">
+                    <span>⬇️</span> Unduh MP4
+                </a>
+            </div>
+
+            <!-- Tombol Hapus / Jangan Simpan -->
+            <button type="button"
+                    hx-delete="/testrun/{{ run.id }}/delete-video"
+                    hx-target="#run-status-container"
+                    hx-swap="innerHTML"
+                    hx-confirm="Yakin ingin menghapus video hasil tes ini dari server?"
+                    class="px-3.5 py-1.5 bg-slate-900 hover:bg-rose-950 text-slate-400 hover:text-rose-400 border border-slate-800 rounded-xl text-xs font-semibold transition-colors cursor-pointer">
+                🗑️ Jangan Simpan
+            </button>
+        </div>
     </div>
     {% endif %}
 {% endif %}

@@ -29,6 +29,7 @@ class CommandDefinition(Base):
     requires_value: Mapped[bool] = mapped_column(Boolean, default=False)
     placeholder_selector: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
     placeholder_value: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
+    requires_selector: Mapped[bool] = mapped_column(Boolean, default=False)  # ✅ Nama kolom yang benar
 
 
 class TestCase(Base):

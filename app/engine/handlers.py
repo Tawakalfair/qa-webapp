@@ -1,7 +1,8 @@
 import os
+import re
 import asyncio
 from typing import Any
-from playwright.async_api import Page
+from playwright.async_api import Page, expect
 
 
 async def execute_single_command(page: Page, step: Any, base_url: str, run_id: str = "DEFAULT"):
@@ -122,7 +123,7 @@ async def execute_single_command(page: Page, step: Any, base_url: str, run_id: s
         screenshot_dir = os.path.join("static", "screenshots")
         os.makedirs(screenshot_dir, exist_ok=True)
         # Penamaan file terstruktur: RUN_ID + STEP_ORDER
-        filename = f"{run_id}_step_{step.step_order}.png"
+        filename = f"case_{step.test_case_id}_step_{step.step_order}.png"
         filepath = os.path.join(screenshot_dir, filename)
         await page.screenshot(path=filepath, full_page=True)
 
@@ -150,5 +151,63 @@ async def execute_single_command(page: Page, step: Any, base_url: str, run_id: s
         if not is_visible:
             raise AssertionError(f"Verifikasi Elemen Gagal! Elemen '{selector}' tidak tampak pada layar.")
 
+    elif cmd in ["ASSERT", "VERIFY"]:
+        if not selector:
+            raise ValueError(f"Perintah {cmd} membutuhkan target_selector.")
+        
+        locator = page.locator(selector)
+        val_lower = val.lower()
+        ASSERT_TIMEOUT = 5000  # <--- Set Timeout Assert ke 5 Detik (5000 ms)
+
+        # 1. Verifikasi Visual Warna / Style (e.g., "background is red", "bg-red", "color green")
+        if any(keyword in val_lower for keyword in ["background", "bg", "color", "warna"]):
+            if any(w in val_lower for w in ["red", "merah", "danger"]):
+                try:
+                    await expect(locator).to_have_class(re.compile(r"red|danger|error|rose|amber"), timeout=ASSERT_TIMEOUT)
+                except Exception:
+                    bg_color = await locator.evaluate("el => window.getComputedStyle(el).backgroundColor")
+                    if not any(c in bg_color for c in ["255", "239", "220", "248", "252"]):
+                        raise AssertionError(f"Ekspektasi warna background merah, tetapi mendapatkan: {bg_color}")
+            elif any(w in val_lower for w in ["green", "hijau", "success"]):
+                await expect(locator).to_have_class(re.compile(r"green|emerald|success"), timeout=ASSERT_TIMEOUT)
+
+        # 2. Verifikasi Matematika/Angka (e.g., "< 0", "> 100", "<= 15", "!= 0")
+        elif re.match(r"^([<>]=?|!=|=)\s*(-?\d+(\.\d+)?)$", val):
+            match = re.match(r"^([<>]=?|!=|=)\s*(-?\d+(\.\d+)?)$", val)
+            operator = match.group(1)
+            target_num = float(match.group(2))
+
+            # Tunggu elemen muncul maks 5 detik
+            element = await page.wait_for_selector(selector, state="visible", timeout=ASSERT_TIMEOUT)
+            text_content = await element.text_content() or ""
+            cleaned_num_str = re.sub(r"[^\d.-]", "", text_content.replace(",", "."))
+            
+            if not cleaned_num_str:
+                raise AssertionError(f"Elemen '{selector}' tidak mengandung angka untuk dibandingkan dengan '{val}'.")
+
+            actual_num = float(cleaned_num_str)
+
+            ops = {
+                "<": actual_num < target_num,
+                "<=": actual_num <= target_num,
+                ">": actual_num > target_num,
+                ">=": actual_num >= target_num,
+                "!=": actual_num != target_num,
+                "=": actual_num == target_num,
+            }
+            if not ops.get(operator, False):
+                raise AssertionError(f"Gagal verifikasi angka: Nilai aktual ({actual_num}) tidak memenuhi kondisi '{val}'.")
+
+        # 3. Verifikasi Status Elemen (e.g., "disabled", "visible")
+        elif val_lower in ["disabled", "non-aktif"]:
+            await expect(locator).to_be_disabled(timeout=ASSERT_TIMEOUT)
+        elif val_lower in ["visible", "tampil"]:
+            await expect(locator).to_be_visible(timeout=ASSERT_TIMEOUT)
+
+        # 4. Default: Verifikasi Teks/Nilai Biasa
+        else:
+            await expect(locator).to_contain_text(val, timeout=ASSERT_TIMEOUT)
+    
     else:
         raise ValueError(f"Perintah tidak dikenal: {cmd}")
+        

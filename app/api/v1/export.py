@@ -2,6 +2,7 @@ import os
 from typing import Optional
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import StreamingResponse
+from fastapi.templating import Jinja2Templates
 from sqlalchemy import select
 from sqlalchemy.orm import selectinload
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -11,6 +12,7 @@ from app.models.models import TestCase, Project
 from app.services.export_service import generate_ut_matrix_excel
 
 router = APIRouter(prefix="/export", tags=["Export"])
+templates = Jinja2Templates(directory="templates")
 
 
 @router.get("/ut-matrix")
@@ -62,4 +64,59 @@ async def export_ut_matrix(
         excel_stream,
         media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
         headers={"Content-Disposition": f'attachment; filename="{filename}"'}
+    )
+
+
+@router.get("/modal")
+async def get_export_modal(
+    project_id: Optional[int] = None,
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    Menampilkan Modal Ringkasan Status Skenario sebelum file Excel diekspor.
+    """
+    query = select(TestCase).options(
+        selectinload(TestCase.project),
+        selectinload(TestCase.runs)
+    )
+
+    project_name = "Semua Proyek"
+    if project_id:
+        proj_result = await db.execute(select(Project).where(Project.id == project_id))
+        project = proj_result.scalar_one_or_none()
+        if project:
+            project_name = project.name
+            query = query.where(TestCase.project_id == project_id)
+
+    result = await db.execute(query)
+    test_cases = result.scalars().all()
+
+    # Hitung Statistik Status Terakhir
+    total_cases = len(test_cases)
+    passed_count = 0
+    failed_count = 0
+    untested_count = 0
+
+    for tc in test_cases:
+        runs_sorted = sorted(tc.runs, key=lambda r: getattr(r, 'executed_at', getattr(r, 'created_at', None)), reverse=True) if tc.runs else []
+        last_status = runs_sorted[0].status if runs_sorted else "UNTESTED"
+        
+        if last_status == "SUCCESS":
+            passed_count += 1
+        elif last_status == "FAILED":
+            failed_count += 1
+        else:
+            untested_count += 1
+
+    return templates.TemplateResponse(
+        "partials/export_modal.html",
+        {
+            "request": {},
+            "project_id": project_id or "",
+            "project_name": project_name,
+            "total_cases": total_cases,
+            "passed_count": passed_count,
+            "failed_count": failed_count,
+            "untested_count": untested_count,
+        }
     )

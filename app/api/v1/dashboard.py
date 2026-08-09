@@ -2,12 +2,14 @@ import json
 import uuid
 import os
 from typing import Optional
-from fastapi import APIRouter, Request, BackgroundTasks, Depends, Form
+from fastapi import APIRouter, HTTPException, Request, BackgroundTasks, Depends, Form, Response
 from fastapi.templating import Jinja2Templates
-from fastapi.responses import RedirectResponse, Response
+from fastapi.responses import FileResponse, HTMLResponse, RedirectResponse, Response
 from sqlalchemy import select
 from sqlalchemy.orm import selectinload
 from sqlalchemy.ext.asyncio import AsyncSession
+from fastapi import Form
+from typing import Optional
 
 from app.api.deps import get_db
 from app.models.models import TestCase, TestStep, TestRun, CommandDefinition, Project
@@ -28,7 +30,7 @@ def trigger_toast(response_obj: Response, message: str, toast_type: str = "succe
 
 
 # ==========================================
-# 1. RUTE DASHBOARD & FILTER SKENARIO
+# RUTE DASHBOARD & FILTER SKENARIO
 # ==========================================
 
 @router.get("/")
@@ -70,7 +72,7 @@ async def render_dashboard(
 
 
 # ==========================================
-# 2. RUTE MANAJEMEN PROYEK (CRUD)
+# RUTE MANAJEMEN PROYEK (CRUD)
 # ==========================================
 
 @router.post("/projects/new")
@@ -122,7 +124,7 @@ async def delete_project(project_id: int, db: AsyncSession = Depends(get_db)):
 
 
 # ==========================================
-# 3. RUTE SKENARIO (TEST CASE & METADATA)
+# RUTE SKENARIO (TEST CASE & METADATA)
 # ==========================================
 
 @router.get("/testcase/{case_id}")
@@ -198,6 +200,131 @@ async def create_test_case(
     msg = f"Skenario '{new_case.name}' berhasil ditambahkan!"
     return RedirectResponse(url=f"/?project_id={parsed_project_id}&msg={msg}&type=success", status_code=303)
 
+@router.get("/testcase/{case_id}/edit-modal")
+async def get_edit_case_modal(
+    case_id: int,
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    Menampilkan Modal HTML untuk mengedit informasi Skenario Tes.
+    """
+    result = await db.execute(
+        select(TestCase)
+        .options(selectinload(TestCase.project))
+        .where(TestCase.id == case_id)
+    )
+    test_case = result.scalar_one_or_none()
+    if not test_case:
+        raise HTTPException(status_code=404, detail="Skenario tidak ditemukan")
+
+    return templates.TemplateResponse(
+        "partials/edit_case_modal.html",
+        {"request": {}, "case": test_case}
+    )
+
+
+@router.post("/testcase/{case_id}/edit")
+async def update_test_case(
+    case_id: int,
+    name: str = Form(...),
+    base_url: str = Form(...),
+    test_type: str = Form("Normal"),
+    reference_number: Optional[str] = Form(None),
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    Menyimpan perubahan Skenario Tes dan mengembalikan HTML panel kanan 
+    sekaligus memperbarui daftar panel kiri via HTMX OOB.
+    """
+    # 1. Ambil TestCase target
+    result = await db.execute(
+        select(TestCase)
+        .options(
+            selectinload(TestCase.project),
+            selectinload(TestCase.steps),
+            selectinload(TestCase.runs)
+        )
+        .where(TestCase.id == case_id)
+    )
+    test_case = result.scalar_one_or_none()
+    if not test_case:
+        raise HTTPException(status_code=404, detail="Skenario tidak ditemukan")
+
+    # 2. Update nilai
+    test_case.name = name.strip()
+    test_case.base_url = base_url.strip()
+    test_case.test_type = test_type.strip() if test_type else "Normal"
+    test_case.reference_number = reference_number.strip() if reference_number else None
+
+    db.add(test_case)
+    await db.commit()
+
+    # 3. Query ulang instance TestCase segar
+    updated_result = await db.execute(
+        select(TestCase)
+        .options(
+            selectinload(TestCase.project),
+            selectinload(TestCase.steps),
+            selectinload(TestCase.runs)
+        )
+        .where(TestCase.id == case_id)
+    )
+    updated_case = updated_result.scalar_one_or_none()
+
+    # 4. Ambil data pendukung
+    commands_result = await db.execute(
+        select(CommandDefinition).order_by(CommandDefinition.code.asc())
+    )
+    commands = commands_result.scalars().all()
+
+    other_cases_result = await db.execute(
+        select(TestCase)
+        .options(selectinload(TestCase.project))
+        .where(TestCase.id != case_id)
+        .order_by(TestCase.name.asc())
+    )
+    other_cases = other_cases_result.scalars().all()
+
+    # 5. UNTUK OOB SWAP: Ambil seluruh daftar skenario terbaru
+    all_cases_query = select(TestCase).options(selectinload(TestCase.project)).order_by(TestCase.id.asc())
+    if updated_case.project_id:
+        all_cases_query = all_cases_query.where(TestCase.project_id == updated_case.project_id)
+    
+    all_cases_result = await db.execute(all_cases_query)
+    all_test_cases = all_cases_result.scalars().all()
+
+    # 6. Kirimkan right_panel.html beserta list test_cases
+    return templates.TemplateResponse(
+        "partials/right_panel.html",
+        {
+            "request": {},
+            "case": updated_case,
+            "commands": commands,
+            "other_cases": other_cases,
+            "test_cases": all_test_cases  # Digunakan oleh OOB Swap di right_panel.html
+        }
+    )
+
+@router.get("/testcases/list-partial")
+async def get_case_list_partial(
+    project_id: Optional[int] = None,
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    Endpoint partial untuk merender ulang daftar skenario di panel kiri via HTMX.
+    """
+    query = select(TestCase).options(selectinload(TestCase.project)).order_by(TestCase.id.asc())
+    
+    if project_id:
+        query = query.where(TestCase.project_id == project_id)
+        
+    result = await db.execute(query)
+    test_cases = result.scalars().all()
+    
+    return templates.TemplateResponse(
+        "partials/case_list.html",
+        {"request": {}, "test_cases": test_cases}
+    )
 
 @router.post("/testcase/{case_id}/edit-ut-metadata")
 async def update_ut_metadata(
@@ -269,7 +396,7 @@ async def delete_test_case(case_id: int, db: AsyncSession = Depends(get_db)):
 
 
 # ==========================================
-# 4. RUTE STEP EDITOR (HTMX INLINE EDIT)
+# RUTE STEP EDITOR (HTMX INLINE EDIT)
 # ==========================================
 
 @router.get("/testcase/{case_id}/step/{step_id}/edit")
@@ -457,19 +584,114 @@ async def delete_test_step(
     res = templates.TemplateResponse("partials/step_list.html", {"request": request, "case": test_case})
     return trigger_toast(res, "Langkah instruksi berhasil dihapus.")
 
+@router.post("/testcase/{case_id}/step/{step_id}/move/{direction}")
+async def move_step_order(
+    case_id: int,
+    step_id: int,
+    direction: str,  # "up" atau "down"
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    Menukar urutan (step_order) langkah tes ke atas atau ke bawah.
+    """
+    # 1. Ambil langkah target yang ingin dipindahkan
+    result = await db.execute(
+        select(TestStep).where(TestStep.id == step_id, TestStep.test_case_id == case_id)
+    )
+    current_step = result.scalar_one_or_none()
+    if not current_step:
+        raise HTTPException(status_code=404, detail="Step tidak ditemukan")
+
+    current_order = current_step.step_order
+    target_order = current_order - 1 if direction == "up" else current_order + 1
+
+    # 2. Cari langkah tetangga yang akan ditukar posisinya
+    neighbor_result = await db.execute(
+        select(TestStep).where(
+            TestStep.test_case_id == case_id,
+            TestStep.step_order == target_order
+        )
+    )
+    neighbor_step = neighbor_result.scalar_one_or_none()
+
+    # 3. Tukar nilai step_order jika tetangganya ada
+    if neighbor_step:
+        current_step.step_order = target_order
+        neighbor_step.step_order = current_order
+        await db.commit()
+
+    # 4. Ambil ulang seluruh daftar langkah yang sudah terurut
+    steps_result = await db.execute(
+        select(TestStep)
+        .where(TestStep.test_case_id == case_id)
+        .order_by(TestStep.step_order.asc())
+    )
+    updated_steps = steps_result.scalars().all()
+
+    # 5. PERBAIKAN: Tambahkan selectinload(TestCase.steps) agar tidak memicu MissingGreenlet di template
+    case_result = await db.execute(
+        select(TestCase)
+        .options(selectinload(TestCase.steps))
+        .where(TestCase.id == case_id)
+    )
+    test_case = case_result.scalar_one_or_none()
+
+    # Pastikan langkah pada objek test_case sudah terurut sesuai updated_steps
+    if test_case:
+        test_case.steps = updated_steps
+
+    return templates.TemplateResponse(
+        "partials/step_list.html",
+        {
+            "request": {},
+            "case": test_case,
+            "steps": updated_steps
+        }
+    )
+
 
 # ==========================================
-# 5. RUTE EKSEKUSI PENGIJIAN
+# RUTE EKSEKUSI PENGIJIAN
 # ==========================================
 
 @router.post("/testcase/{case_id}/run")
-async def run_test(case_id: int, request: Request, background_tasks: BackgroundTasks, db: AsyncSession = Depends(get_db)):
+async def run_test(
+    case_id: int, 
+    request: Request, 
+    background_tasks: BackgroundTasks, 
+    record_video: Optional[str] = Form(None), # Menangkap checkbox
+    db: AsyncSession = Depends(get_db)
+):
+    # 1. AUTO-CLEANUP: Hapus file video temporary ("temp_") lama yang diabaikan pengguna
+    temp_runs_result = await db.execute(
+        select(TestRun).where(TestRun.video_url.like("%temp_%"))
+    )
+    unkept_runs = temp_runs_result.scalars().all()
+
+    for old_run in unkept_runs:
+        if old_run.video_url:
+            filepath = old_run.video_url.lstrip("/")
+            if os.path.exists(filepath):
+                try:
+                    os.remove(filepath)
+                except Exception as e:
+                    print(f"[Auto-Cleanup Warning] Gagal menghapus {filepath}: {e}")
+            old_run.video_url = None
+
+    await db.commit()
+
+    # 2. Tentukan status rekam video berdasarkan checkbox
+    should_record = True if (record_video and record_video.lower() in ["true", "on", "1"]) else False
+
+    # 3. Buat TestRun baru
     run_id = f"RUN-{str(uuid.uuid4())[:8].upper()}"
     new_run = TestRun(id=run_id, test_case_id=case_id, status="PENDING")
     db.add(new_run)
     await db.commit()
 
-    background_tasks.add_task(run_test_scenario, run_id, case_id)
+    # 4. Kirim parameter should_record ke background tasks
+    background_tasks.add_task(run_test_scenario, run_id, case_id, should_record)
+    
     return templates.TemplateResponse("partials/status.html", {"request": request, "run": new_run})
 
 
@@ -478,3 +700,66 @@ async def get_run_status(run_id: str, request: Request, db: AsyncSession = Depen
     result = await db.execute(select(TestRun).where(TestRun.id == run_id))
     test_run = result.scalar_one()
     return templates.TemplateResponse("partials/status.html", {"request": request, "run": test_run})
+
+# 1. Endpoint Simpan Video
+@router.post("/testrun/{run_id}/keep-video")
+async def keep_test_run_video(
+    run_id: str,  # PERBAIKAN: Ubah int menjadi str
+    db: AsyncSession = Depends(get_db)
+):
+    result = await db.execute(select(TestRun).where(TestRun.id == run_id))
+    run = result.scalar_one_or_none()
+    
+    if run and run.video_url and "temp_" in run.video_url:
+        permanent_url = run.video_url.replace("temp_", "")
+        old_path = run.video_url.lstrip("/")
+        new_path = permanent_url.lstrip("/")
+        
+        if os.path.exists(old_path):
+            os.rename(old_path, new_path)
+            run.video_url = permanent_url
+            await db.commit()
+            
+    return HTMLResponse('<div class="p-2.5 bg-emerald-50 text-emerald-700 text-xs font-bold rounded-xl border border-emerald-200">✅ Video berhasil disimpan permanen untuk laporan.</div>')
+
+
+# 2. Endpoint Hapus Video
+@router.delete("/testrun/{run_id}/delete-video")
+async def delete_test_run_video(
+    run_id: str,  # PERBAIKAN: Ubah int menjadi str
+    db: AsyncSession = Depends(get_db)
+):
+    result = await db.execute(select(TestRun).where(TestRun.id == run_id))
+    run = result.scalar_one_or_none()
+    
+    if run and run.video_url:
+        filepath = run.video_url.lstrip("/")
+        if os.path.exists(filepath):
+            try:
+                os.remove(filepath)
+            except Exception as e:
+                print(f"[Delete Video Warning] Gagal menghapus file: {e}")
+                
+        run.video_url = None
+        await db.commit()
+        
+    return HTMLResponse('<div class="p-2.5 bg-slate-100 text-slate-500 text-xs italic rounded-xl border border-slate-200">🗑️ Video telah dihapus dari server.</div>')
+
+
+# 3. Endpoint Download Video
+@router.get("/testrun/{run_id}/download-video")
+async def download_test_run_video(
+    run_id: str,  # PERBAIKAN: Ubah int menjadi str
+    db: AsyncSession = Depends(get_db)
+):
+    result = await db.execute(select(TestRun).where(TestRun.id == run_id))
+    run = result.scalar_one_or_none()
+    
+    if not run or not run.video_url:
+        raise HTTPException(status_code=404, detail="Data video tidak ditemukan")
+        
+    filepath = run.video_url.lstrip("/")
+    if not os.path.exists(filepath):
+        raise HTTPException(status_code=404, detail="File video fisik tidak ditemukan di server")
+        
+    return FileResponse(filepath, media_type="video/mp4", filename=f"TestRun_{run_id}.mp4")

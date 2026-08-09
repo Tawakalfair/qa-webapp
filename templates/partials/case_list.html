@@ -1,0 +1,51 @@
+{% for case in test_cases %}
+<div hx-get="/testcase/{{ case.id }}" 
+     hx-target="#right-panel" 
+     hx-swap="innerHTML"
+     class="p-4 rounded-xl border border-slate-200 hover:border-blue-400 hover:bg-blue-50/50 cursor-pointer transition-all group relative">
+    
+    <!-- Badges Header -->
+    <div class="flex items-center gap-1.5 mb-1.5 flex-wrap">
+        <span class="text-[10px] font-mono font-bold px-2 py-0.5 rounded-md bg-blue-100 text-blue-800 border border-blue-200">
+            #{{ case.id }}
+        </span>
+
+        <span class="text-[10px] font-bold px-2 py-0.5 rounded-md bg-slate-100 text-slate-600 border border-slate-200">
+            📁 {{ case.project.name if case.project else 'Default' }}
+        </span>
+        
+        <!-- LOGIKA BADGE LENGKAP -->
+        {% if case.test_type == 'CHANGE_REQUEST' or case.test_type == 'CR' %}
+            <span class="text-[10px] font-bold px-2 py-0.5 rounded-md bg-blue-100 text-blue-700 border border-blue-200">🔵 CR</span>
+        {% elif case.test_type == 'NEW_FEATURE' or case.test_type == 'Feature' %}
+            <span class="text-[10px] font-bold px-2 py-0.5 rounded-md bg-purple-100 text-purple-700 border border-purple-200">🟣 Feature</span>
+        {% elif case.test_type == 'HOTFIX' or case.test_type == 'Hotfix' %}
+            <span class="text-[10px] font-bold px-2 py-0.5 rounded-md bg-red-100 text-red-700 border border-red-200">🔴 Hotfix</span>
+        {% elif case.test_type == 'Boundary' %}
+            <span class="text-[10px] font-bold px-2 py-0.5 rounded-md bg-amber-100 text-amber-700 border border-amber-200">🟡 Boundary</span>
+        {% elif case.test_type == 'Exception' %}
+            <span class="text-[10px] font-bold px-2 py-0.5 rounded-md bg-rose-100 text-rose-700 border border-rose-200">🟠 Exception</span>
+        {% else %}
+            <span class="text-[10px] font-bold px-2 py-0.5 rounded-md bg-emerald-100 text-emerald-700 border border-emerald-200">🟢 {{ case.test_type or 'Regression' }}</span>
+        {% endif %}
+
+        {% if case.reference_number %}
+        <span class="text-[10px] font-mono font-bold px-2 py-0.5 rounded-md bg-amber-100 text-amber-800 border border-amber-200">
+            🏷️ {{ case.reference_number }}
+        </span>
+        {% endif %}
+    </div>
+
+    <div class="flex justify-between items-start">
+        <div>
+            <h4 class="font-bold text-slate-800 text-sm group-hover:text-blue-600 leading-snug">{{ case.name }}</h4>
+            <p class="text-xs text-slate-400 font-mono mt-0.5 truncate max-w-[280px]">{{ case.base_url }}</p>
+        </div>
+        <form action="/testcase/{{ case.id }}/delete" method="POST" onsubmit="return confirm('Hapus skenario ini?')">
+            <button type="submit" class="text-slate-300 hover:text-red-500 p-1 transition-colors">🗑️</button>
+        </form>
+    </div>
+</div>
+{% else %}
+<p class="text-sm text-slate-400 italic text-center py-6">Belum ada skenario ditemukan.</p>
+{% endfor %}

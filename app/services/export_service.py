@@ -181,8 +181,8 @@ def generate_ut_matrix_excel(test_cases: list[TestCase], project_name: str = "Al
             status_cell.fill = status_fail_fill
             status_cell.font = status_fail_font
 
-# ---------------------------------------------------------
-        # 3. SHEET EVIDENCE (HANYA MENAMPILKAN LANGKAH YANG ADA SCREENSHOT-NYA)
+        # ---------------------------------------------------------
+        # 3. SHEET EVIDENCE (CAPTION DARI INPUT_VALUE / STRING KOSONG)
         # ---------------------------------------------------------
         ws_scen = wb.create_sheet(title=str(idx))
         ws_scen.column_dimensions['A'].width = 120
@@ -195,46 +195,42 @@ def generate_ut_matrix_excel(test_cases: list[TestCase], project_name: str = "Al
         ws_scen.cell(row=scen_row, column=1, value=f"Base URL: {tc.base_url} | Status Terakhir: {last_status}").font = Font(name="Calibri", size=10, italic=True, color="595959")
         scen_row += 2
 
-        evidence_count = 0  # Penghitung jumlah evidence yang berhasil dimasukkan
+        evidence_count = 0
 
         if tc.steps:
             sorted_tc_steps = sorted(tc.steps, key=lambda s: s.step_order)
             for step in sorted_tc_steps:
-                # 1. CEK DULU KETERSEDIAAN FILE SCREENSHOT
+                # 1. Cek ketersediaan file screenshot
                 img_path = None
                 if last_run:
-                    possible_path = os.path.join("static", "screenshots", f"{last_run.id}_step_{step.step_order}.png")
+                    possible_path = os.path.join("static", "screenshots", f"case_{tc.id}_step_{step.step_order}.png")
                     if os.path.exists(possible_path):
                         img_path = possible_path
 
-                # 2. JIKA GAMBAR TIDAK ADA, LANGSUNG SKIP TOTAL (JANGAN TULIS BARIS KUNING)
+                # 2. Skip jika langkah ini tidak menghasilkan screenshot
                 if not img_path or not os.path.exists(img_path):
                     continue
 
-                # --- JIKA GAMBAR ADA, BARU TULIS BARIS KUNING & TEMPEL GAMBAR ---
                 evidence_count += 1
 
-                step_text = f"Langkah #{step.step_order}: [{step.command}]"
-                if step.target_selector:
-                    step_text += f" Target: {step.target_selector}"
-                if step.input_value:
-                    step_text += f" | Value: '{step.input_value}'"
+                # 3. LOGIKA BARU: Baca input_value, jika kosong isi dengan string kosong ""
+                caption_text = step.input_value.strip() if (step.input_value and step.input_value.strip()) else ""
 
-                # WARNAI SELURUH CELL A S/D K (KOLOM 1-11)
+                # Warnai seluruh cell A s/d K (Kolom 1-11) dengan warna kuning
                 for col_idx in range(1, 12):
                     cell = ws_scen.cell(row=scen_row, column=col_idx)
                     cell.fill = step_yellow_fill
                     cell.border = thin_border
                     if col_idx == 1:
-                        cell.value = step_text
+                        cell.value = caption_text
                         cell.font = step_header_font
 
-                # MERGE CELL A S/D K
+                # Merge cell A s/d K
                 ws_scen.merge_cells(start_row=scen_row, start_column=1, end_row=scen_row, end_column=11)
                 ws_scen.row_dimensions[scen_row].height = 25
                 scen_row += 1
 
-                # SISIPKAN GAMBAR SCREENSHOT (57 cm x 32 cm)
+                # 4. Sisipkan gambar screenshot (57 cm x 32 cm)
                 try:
                     img = OpenPyxlImage(img_path)
                     img.width = int(57 * 37.795)   # ~2154 px
@@ -248,11 +244,13 @@ def generate_ut_matrix_excel(test_cases: list[TestCase], project_name: str = "Al
                     print(f"[Excel Export Image Error]: {e}")
                     scen_row += 2
 
-        # 3. JIKA SAMA SEKALI TIDAK ADA EVIDENCE DI SKENARIO INI, BERIKAN CATATAN
+        # Catatan jika tidak ada evidence sama sekali di skenario ini
         if evidence_count == 0:
             ws_scen.cell(row=scen_row, column=1, value="Tidak ada bukti screenshot yang diambil pada skenario ini.").font = Font(name="Calibri", size=11, italic=True, color="808080")
 
-    # Atur Lebar Kolom untuk Sheet Matrix Utama
+    # =========================================================================
+    # 4. BAGIAN YANG SEBELUMNYA HILANG: ATUR LEBAR KOLOM, SIMPAN BUFFER & RETURN
+    # =========================================================================
     col_widths = {
         "A": 10, "B": 18, "C": 25, "D": 22, "E": 18,
         "F": 18, "G": 22, "H": 35, "I": 30, "J": 14, "K": 25

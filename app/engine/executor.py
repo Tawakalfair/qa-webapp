@@ -59,8 +59,7 @@ async def execute_steps_recursively(
             await execute_single_command(page, step, base_url, run_id=run_id)
 
 
-async def _async_run_test_scenario(run_id: str, case_id: int):
-    # Buat engine lokal khusus untuk thread ini agar terisolasi dari event loop Uvicorn
+async def _async_run_test_scenario(run_id: str, case_id: int, record_video: bool = True):
     thread_engine = create_async_engine(settings.DATABASE_URL)
     ThreadSession = sessionmaker(thread_engine, class_=AsyncSession, expire_on_commit=False)
 
@@ -83,25 +82,30 @@ async def _async_run_test_scenario(run_id: str, case_id: int):
         videos_dir = os.path.join("static", "videos")
         os.makedirs(videos_dir, exist_ok=True)
 
-        video_file_name = f"{run_id}.mp4"
-        relative_video_path = f"/static/videos/{video_file_name}"
+        video_file_name = f"temp_{run_id}.mp4" if record_video else None
+        relative_video_path = f"/static/videos/{video_file_name}" if record_video else None
 
-        try:
-            async with async_playwright() as p:
+        page = None
+        context = None
+        browser = None
+
+        # PLAYWRIGHT MEMBUNGKUS SERTA MENJAGA KONEKSI ENGINE DRIVER
+        async with async_playwright() as p:
+            try:
                 browser = await p.chromium.launch(headless=True)
-                context = await browser.new_context(
-                    record_video_dir=videos_dir,
-                    record_video_size={"width": 1280, "height": 720},
-                    viewport={"width": 1280, "height": 720}
-                )
                 
-                # Bawaan timeoutPlaywright (15 detik)
+                context_options = {"viewport": {"width": 1280, "height": 720}}
+                if record_video:
+                    context_options["record_video_dir"] = videos_dir
+                    context_options["record_video_size"] = {"width": 1280, "height": 720}
+
+                context = await browser.new_context(**context_options)
                 context.set_default_timeout(15000)
                 context.set_default_navigation_timeout(15000)
 
                 page = await context.new_page()
 
-                # Batasi total durasi eksekusi seluruh skenario maksimal 60 detik
+                # Eksekusi alur tes
                 await asyncio.wait_for(
                     execute_steps_recursively(
                         db=db,
@@ -117,34 +121,53 @@ async def _async_run_test_scenario(run_id: str, case_id: int):
                 await context.close()
                 await browser.close()
 
-                original_video_path = await page.video.path() if page.video else None
-                target_video_path = os.path.join(videos_dir, video_file_name)
-                
-                if original_video_path and os.path.exists(original_video_path):
-                    if os.path.exists(target_video_path):
-                        os.remove(target_video_path)
-                    os.rename(original_video_path, target_video_path)
+                if record_video and page and page.video:
+                    original_video_path = await page.video.path()
+                    target_video_path = os.path.join(videos_dir, video_file_name)
+                    if original_video_path and os.path.exists(original_video_path):
+                        if os.path.exists(target_video_path):
+                            os.remove(target_video_path)
+                        os.rename(original_video_path, target_video_path)
 
                 test_run.status = "SUCCESS"
-                test_run.video_url = relative_video_path
+                test_run.video_url = relative_video_path if record_video else None
                 test_run.error_log = None
+
+            except Exception as e:
+                error_msg = "Eksekusi tes dibatalkan karena melebihi batas waktu maksimal (Timeout 60 detik)." if isinstance(e, asyncio.TimeoutError) else str(e)
+                
+                saved_video_url = None
+                try:
+                    if context:
+                        await context.close()
+                    if browser:
+                        await browser.close()
+
+                    if record_video and page and page.video:
+                        original_video_path = await page.video.path()
+                        target_video_path = os.path.join(videos_dir, video_file_name)
+                        if original_video_path and os.path.exists(original_video_path):
+                            if os.path.exists(target_video_path):
+                                os.remove(target_video_path)
+                            os.rename(original_video_path, target_video_path)
+                            saved_video_url = relative_video_path
+                except Exception as vid_err:
+                    print(f"[Save Failed Video Error]: {vid_err}")
+
+                test_run.status = "FAILED"
+                test_run.error_log = error_msg
+                test_run.video_url = saved_video_url
+
+            finally:
+                # DIJAMIN BERHASIL DICOMMIT KE DATABASE SINKRON HTMX
                 await db.commit()
 
-        except asyncio.TimeoutError:
-            test_run.status = "FAILED"
-            test_run.error_log = "Eksekusi tes dibatalkan karena melebihi batas waktu maksimal (Timeout 60 detik)."
-            await db.commit()
-        except Exception as e:
-            test_run.status = "FAILED"
-            test_run.error_log = str(e)
-            await db.commit()
-        finally:
-            await thread_engine.dispose()
+        await thread_engine.dispose()
 
 
-def run_test_scenario(run_id: str, case_id: int):
+def run_test_scenario(run_id: str, case_id: int, record_video: bool = True):
     """Worker task terisolasi dengan ProactorEventLoopPolicy di Windows."""
     if sys.platform == "win32":
         asyncio.set_event_loop_policy(asyncio.WindowsProactorEventLoopPolicy())
     
-    asyncio.run(_async_run_test_scenario(run_id, case_id))
+    asyncio.run(_async_run_test_scenario(run_id, case_id, record_video))
