@@ -12,6 +12,11 @@ class Settings(BaseSettings):
     VIDEO_DIR: str = "static/videos"
     SCREENSHOT_DIR: str = "static/screenshots"
 
+    # JWT Authentication
+    SECRET_KEY: str = "super-rahasia-ganti-ini-di-production-nanti"
+    ALGORITHM: str = "HS256"
+    ACCESS_TOKEN_EXPIRE_MINUTES: int = 60 * 24 * 7  # Token & Cookie berlaku 7 hari
+
     class Config:
         env_file = ".env"
 

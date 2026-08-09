@@ -1,6 +1,7 @@
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
-from app.models.models import CommandDefinition, Project
+from app.models.models import CommandDefinition, Project, User
+from app.core.security import get_password_hash
 
 INITIAL_COMMANDS = [
     {
@@ -170,3 +171,35 @@ async def seed_commands(db: AsyncSession) -> int:
     if added_count > 0:
         await db.commit()
     return added_count
+
+async def seed_default_user(db: AsyncSession) -> User:
+    """Membuat user admin default jika belum ada di database."""
+    result = await db.execute(select(User).where(User.username == "admin"))
+    user = result.scalar_one_or_none()
+    
+    if not user:
+        user = User(
+            username="admin", 
+            hashed_password=get_password_hash("admin123")
+        )
+        db.add(user)
+        await db.commit()
+        await db.refresh(user)
+        print("✅ User 'admin' (password: admin123) berhasil dibuat.")
+    return user
+
+async def seed_default_project(db: AsyncSession, owner_id: int) -> Project:
+    """Menjamin tersedianya proyek bawaan yang dikaitkan dengan user tertentu."""
+    result = await db.execute(select(Project).where(Project.name == "Default Project", Project.user_id == owner_id))
+    project = result.scalar_one_or_none()
+    
+    if not project:
+        project = Project(
+            user_id=owner_id,
+            name="Default Project",
+            description="Proyek bawaan sistem."
+        )
+        db.add(project)
+        await db.commit()
+        print("✅ Default Project berhasil dibuat.")
+    return project

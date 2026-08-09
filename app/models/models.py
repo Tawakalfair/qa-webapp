@@ -1,22 +1,39 @@
 from datetime import datetime
 from typing import Optional
-from sqlalchemy import String, Text, Integer, ForeignKey, DateTime, Boolean
+from sqlalchemy import String, Text, Integer, ForeignKey, DateTime, Boolean, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from app.core.database import Base
 
+class User(Base):
+    __tablename__ = "users"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
+    username: Mapped[str] = mapped_column(String(50), unique=True, index=True, nullable=False)
+    hashed_password: Mapped[str] = mapped_column(String(255), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+
+    # Relasi: 1 User bisa punya banyak Project
+    projects: Mapped[list["Project"]] = relationship(
+        "Project", back_populates="owner", cascade="all, delete-orphan"
+    )
 
 class Project(Base):
     __tablename__ = "projects"
+    # User A dan User B bisa punya proyek bernama "Default Project", tapi tidak boleh duplikat di user yang sama
+    __table_args__ = (UniqueConstraint("user_id", "name", name="uix_user_project_name"),)
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
-    name: Mapped[str] = mapped_column(String(100), unique=True, nullable=False)
+    user_id: Mapped[int] = mapped_column(
+        ForeignKey("users.id", ondelete="CASCADE"), nullable=False
+    )
+    name: Mapped[str] = mapped_column(String(100), nullable=False) 
     description: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
 
+    owner: Mapped["User"] = relationship("User", back_populates="projects")
     test_cases: Mapped[list["TestCase"]] = relationship(
         "TestCase", back_populates="project", cascade="all, delete-orphan"
     )
-
 
 class CommandDefinition(Base):
     __tablename__ = "command_definitions"
@@ -29,8 +46,6 @@ class CommandDefinition(Base):
     requires_value: Mapped[bool] = mapped_column(Boolean, default=False)
     placeholder_selector: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
     placeholder_value: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
-    requires_selector: Mapped[bool] = mapped_column(Boolean, default=False)  # ✅ Nama kolom yang benar
-
 
 class TestCase(Base):
     __tablename__ = "test_cases"
@@ -44,7 +59,6 @@ class TestCase(Base):
     test_type: Mapped[str] = mapped_column(String(30), default="REGRESSION")
     reference_number: Mapped[Optional[str]] = mapped_column(String(50), nullable=True)
 
-    # UT Document Optional Fields (Hybrid Fallback System)
     ut_theme: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
     ut_function_name: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
     ut_action: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
@@ -64,7 +78,6 @@ class TestCase(Base):
         "TestRun", back_populates="test_case", cascade="all, delete-orphan"
     )
 
-
 class TestStep(Base):
     __tablename__ = "test_steps"
 
@@ -78,7 +91,6 @@ class TestStep(Base):
     input_value: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
 
     test_case: Mapped["TestCase"] = relationship("TestCase", back_populates="steps")
-
 
 class TestRun(Base):
     __tablename__ = "test_runs"
