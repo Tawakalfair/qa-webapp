@@ -1,0 +1,41 @@
+<div class="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 backdrop-blur-sm">
+    <div class="bg-white rounded-2xl shadow-xl border border-slate-200 w-full max-w-lg p-6 relative">
+        <!-- Tombol Tutup -->
+        <button type="button" 
+                onclick="document.getElementById('modal-container').innerHTML = ''" 
+                class="absolute top-4 right-4 text-slate-400 hover:text-slate-600 p-1 transition-colors">
+            ✕
+        </button>
+
+        <div class="mb-5">
+            <h2 class="text-lg font-bold text-slate-900">📥 Impor Langkah Pengujian</h2>
+            <p class="text-sm text-slate-500 mt-1">
+                Salin seluruh langkah dari skenario lain dan tambahkan ke baris terbawah pada skenario <span class="font-semibold text-slate-700">"{{ case.name }}"</span>.
+            </p>
+        </div>
+
+        <form hx-post="/testcase/{{ case.id }}/import-steps" class="space-y-4">
+            <div>
+                <label class="block text-xs font-bold text-slate-600 uppercase tracking-wider mb-2">Pilih Skenario Sumber <span class="text-red-500">*</span></label>
+                <select name="source_case_id" required class="w-full px-4 py-3 rounded-xl border border-slate-300 focus:outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100 transition-all text-sm font-medium bg-white">
+                    <option value="" disabled selected>-- Pilih skenario yang ingin disalin --</option>
+                    {% for other in other_cases %}
+                        <option value="{{ other.id }}">📁 [{{ other.project.name if other.project else 'Default' }}] {{ other.name }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+
+            <div class="pt-2 flex justify-end gap-3">
+                <button type="button" 
+                        onclick="document.getElementById('modal-container').innerHTML = ''" 
+                        class="px-5 py-2.5 rounded-xl font-bold text-sm text-slate-600 hover:bg-slate-100 transition-colors">
+                    Batal
+                </button>
+                <button type="submit" 
+                        class="bg-blue-600 hover:bg-blue-700 text-white font-bold py-2.5 px-6 rounded-xl transition-all shadow-md flex items-center gap-2 cursor-pointer">
+                    Salin Langkah
+                </button>
+            </div>
+        </form>
+    </div>
+</div>

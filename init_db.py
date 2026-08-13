@@ -6,7 +6,7 @@ async def init_db():
     print("🔄 Membangun ulang struktur tabel database SQLite...")
     async with engine.begin() as conn:
         # Menghapus tabel lama & membuat struktur tabel baru
-        await conn.run_sync(Base.metadata.drop_all)
+        # await conn.run_sync(Base.metadata.drop_all)
         await conn.run_sync(Base.metadata.create_all)
     print("✅ Tabel database baru berhasil dibangun!")
 

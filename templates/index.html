@@ -9,13 +9,30 @@
     <script src="/static/js/htmx.min.js" defer></script>
     <script src="/static/js/tailwindcss.js" defer></script>
     <script src="/static/js/app.js" defer></script>
+
+    <style>
+        .custom-scrollbar::-webkit-scrollbar {
+            width: 6px;
+        }
+        .custom-scrollbar::-webkit-scrollbar-track {
+            background: #f1f5f9;
+            border-radius: 8px;
+        }
+        .custom-scrollbar::-webkit-scrollbar-thumb {
+            background: #cbd5e1;
+            border-radius: 8px;
+        }
+        .custom-scrollbar::-webkit-scrollbar-thumb:hover {
+            background: #94a3b8;
+        }
+    </style>
 </head>
 <body class="bg-slate-100 min-h-screen font-sans text-slate-800 antialiased">
     
     <!-- Container Toast Notification -->
     <div id="toast-container" class="fixed top-5 right-5 z-50 flex flex-col gap-2"></div>
 
-    <!-- Top Navbar Minimalis (Diperluas ke max-w-[1700px]) -->
+    <!-- Top Navbar Minimalis -->
     <header class="bg-white border-b border-slate-200 sticky top-0 z-40 shadow-sm">
         <div class="max-w-[1700px] mx-auto px-6 xl:px-10 py-3.5 flex items-center justify-between">
             <div class="flex items-center space-x-3">
@@ -29,36 +46,36 @@
             </div>
 
             <!-- Tombol Aksi Header -->
-        <div class="flex items-center gap-3">
-            <!-- Info User & Tombol Keluar -->
-            <div class="flex items-center gap-3 mr-2 pr-4 border-r border-slate-200">
-                <span class="text-sm font-semibold text-slate-700">👋 Halo, {{ current_user.username }}</span>
-                <form action="/logout" method="POST" class="inline m-0 p-0">
-                    <button type="submit" class="text-xs text-rose-600 hover:text-rose-700 font-bold hover:underline cursor-pointer">
-                        Keluar
-                    </button>
-                </form>
+            <div class="flex items-center gap-3">
+                <!-- Info User & Tombol Keluar -->
+                <div class="flex items-center gap-3 mr-2 pr-4 border-r border-slate-200">
+                    <span class="text-sm font-semibold text-slate-700">👋 Halo, {{ current_user.username }}</span>
+                    <form action="/logout" method="POST" class="inline m-0 p-0">
+                        <button type="submit" class="text-xs text-rose-600 hover:text-rose-700 font-bold hover:underline cursor-pointer">
+                            Keluar
+                        </button>
+                    </form>
+                </div>
+
+                <!-- Tombol Proyek Baru -->
+                <button type="button" 
+                        onclick="openProjectModal()" 
+                        class="bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold text-xs px-3.5 py-2 rounded-xl transition-colors flex items-center gap-1.5 border border-slate-300 cursor-pointer">
+                    <span>➕</span> Proyek Baru
+                </button>
+
+                <!-- Tombol Modal Ekspor -->
+                <button type="button" 
+                        hx-get="/export/modal?project_id={{ selected_project_id or '' }}"
+                        hx-target="#modal-container"
+                        class="bg-emerald-600 hover:bg-emerald-700 text-white font-semibold text-xs px-4 py-2 rounded-xl shadow-md transition-all flex items-center gap-2 cursor-pointer">
+                    <span>📊</span> Ekspor Excel UT Document
+                </button>
             </div>
-
-            <!-- Tombol Proyek Baru -->
-            <button type="button" 
-                    onclick="openProjectModal()" 
-                    class="bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold text-xs px-3.5 py-2 rounded-xl transition-colors flex items-center gap-1.5 border border-slate-300 cursor-pointer">
-                <span>➕</span> Proyek Baru
-            </button>
-
-            <!-- Tombol Modal Ekspor -->
-            <button type="button" 
-                    hx-get="/export/modal?project_id={{ selected_project_id or '' }}"
-                    hx-target="#modal-container"
-                    class="bg-emerald-600 hover:bg-emerald-700 text-white font-semibold text-xs px-4 py-2 rounded-xl shadow-md transition-all flex items-center gap-2 cursor-pointer">
-                <span>📊</span> Ekspor Excel UT Document
-            </button>
-        </div>
         </div>
     </header>
 
-    <!-- Filter Bar Toolbar (Diperluas ke max-w-[1700px]) -->
+    <!-- Filter Bar Toolbar -->
     <div class="bg-white border-b border-slate-200">
         <div class="max-w-[1700px] mx-auto px-6 xl:px-10 py-3 flex items-center justify-between gap-4">
             <div class="flex items-center gap-3 w-full">
@@ -97,14 +114,14 @@
                             <button type="button"
                                     onclick="openEditProjectModal('{{ proj.id }}', '{{ proj.name|e }}', '{{ (proj.description or '')|e }}')"
                                     title="Edit Nama/Deskripsi Proyek"
-                                    class="px-2.5 py-1.5 text-slate-600 hover:text-blue-600 bg-slate-50 hover:bg-blue-50 border border-slate-300 rounded-xl transition-colors text-xs font-semibold flex items-center gap-1">
+                                    class="px-2.5 py-1.5 text-slate-600 hover:text-blue-600 bg-slate-50 hover:bg-blue-50 border border-slate-300 rounded-xl transition-colors text-xs font-semibold flex items-center gap-1 cursor-pointer">
                                 ✏️ Edit Proyek
                             </button>
                             <form action="/projects/{{ proj.id }}/delete" method="POST" 
                                   onsubmit="return confirm('Apakah Anda yakin ingin menghapus proyek \'{{ proj.name|e }}\'? Seluruh skenario pengujian di dalamnya akan ikut terhapus!')">
                                 <button type="submit"
                                         title="Hapus Proyek Ini"
-                                        class="px-2.5 py-1.5 text-slate-600 hover:text-red-600 bg-slate-50 hover:bg-red-50 border border-slate-300 rounded-xl transition-colors text-xs font-semibold flex items-center gap-1">
+                                        class="px-2.5 py-1.5 text-slate-600 hover:text-red-600 bg-slate-50 hover:bg-red-50 border border-slate-300 rounded-xl transition-colors text-xs font-semibold flex items-center gap-1 cursor-pointer">
                                     🗑️ Hapus Proyek
                                 </button>
                             </form>
@@ -116,11 +133,11 @@
         </div>
     </div>
 
-    <!-- Main Container Layout (Diperluas dengan Pembagian Grid Responsif) -->
+    <!-- Main Container Layout -->
     <main class="max-w-[1700px] mx-auto px-6 xl:px-10 py-8">
-        <div class="grid grid-cols-12 gap-8">
+        <div class="grid grid-cols-12 gap-8 items-start">
             
-            <!-- Side Panel Kiri: Form Buat Skenario & List Skenario (Laptop: 5/12, Monitor Eksternal: 4/12) -->
+            <!-- Side Panel Kiri: Form Buat Skenario & List Skenario -->
             <div class="col-span-12 lg:col-span-5 2xl:col-span-4 space-y-6">
                 
                 <!-- Card Form Tambah Skenario Baru -->
@@ -133,7 +150,7 @@
                         <!-- Pilih Proyek -->
                         <div>
                             <label class="block text-xs font-semibold text-slate-600 uppercase mb-1">Proyek Target <span class="text-red-500">*</span></label>
-                            <select name="project_id" required class="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 focus:outline-none focus:border-blue-500 text-sm font-semibold text-slate-700">
+                            <select name="project_id" required class="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 focus:outline-none focus:border-blue-500 text-sm font-semibold text-slate-700 bg-white">
                                 {% for proj in projects %}
                                 <option value="{{ proj.id }}" {% if selected_project_id == proj.id %}selected{% endif %}>
                                     {{ proj.name }}
@@ -160,7 +177,7 @@
                         <div class="grid grid-cols-2 gap-3">
                             <div>
                                 <label class="block text-xs font-semibold text-slate-600 uppercase mb-1">Tipe Pengujian</label>
-                                <select name="test_type" class="w-full px-3 py-2 rounded-xl border border-slate-300 text-xs font-semibold text-slate-700">
+                                <select name="test_type" class="w-full px-3 py-2 rounded-xl border border-slate-300 text-xs font-semibold text-slate-700 bg-white">
                                     <option value="REGRESSION">🟢 Regression</option>
                                     <option value="CHANGE_REQUEST">🔵 Change Request</option>
                                     <option value="NEW_FEATURE">🟣 New Feature</option>
@@ -197,7 +214,7 @@
                                 <div class="grid grid-cols-2 gap-3">
                                     <div>
                                         <label class="block text-[10px] font-bold text-slate-500 uppercase mb-1">Classification</label>
-                                        <select name="ut_classification" class="w-full px-2.5 py-1.5 border border-slate-300 rounded-lg text-xs">
+                                        <select name="ut_classification" class="w-full px-2.5 py-1.5 border border-slate-300 rounded-lg text-xs bg-white">
                                             <option value="">Auto: Normal</option>
                                             <option value="Normal">Normal</option>
                                             <option value="Abnormal (Error Handling)">Abnormal (Error Handling)</option>
@@ -229,32 +246,55 @@
                         </details>
 
                         <button type="submit" 
-                                class="w-full bg-blue-600 hover:bg-blue-700 text-white font-semibold py-2.5 px-4 rounded-xl shadow-md transition-all text-sm">
+                                class="w-full bg-blue-600 hover:bg-blue-700 text-white font-semibold py-2.5 px-4 rounded-xl shadow-md transition-all text-sm cursor-pointer">
                             Simpan Skenario
                         </button>
                     </form>
                 </div>
 
-                <!-- Card List Daftar Skenario -->
-            <div class="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm">
-                <h3 class="font-bold text-slate-900 text-xs uppercase tracking-wider mb-4 text-slate-400">
-                    Daftar Skenario Terdaftar ({{ test_cases|length }})
-                </h3>
-                
-                <!-- PASANG HTMX TRIGGER DI KONTRAINER INI -->
-                <div id="case-list-container"
-                    hx-get="/testcases/list-partial?project_id={{ selected_project_id or '' }}"
-                    hx-trigger="reload-case-list from:body"
-                    hx-swap="innerHTML"
-                    class="space-y-2.5">
+                <!-- Card List Daftar Skenario (Dengan Scrollbar & Batasan Tinggi Rapi) -->
+                <div class="bg-white rounded-2xl border border-slate-200 p-5 shadow-sm flex flex-col">
                     
-                    {% include 'partials/case_list.html' %}
-                    
+                    <!-- Header Sidebar & Live Search Input -->
+                    <div class="mb-3 space-y-2.5 flex-shrink-0">
+                        <div class="flex items-center justify-between">
+                            <h2 class="font-bold text-xs uppercase tracking-wider text-slate-700 flex items-center gap-1.5">
+                                <span>📋</span> Daftar Skenario Tes
+                            </h2>
+                            <button type="button" 
+                                    onclick="document.querySelector('input[name=\'name\']')?.focus(); document.querySelector('input[name=\'name\']')?.scrollIntoView({ behavior: 'smooth', block: 'center' });" 
+                                    class="text-[11px] bg-blue-600 hover:bg-blue-700 text-white font-bold px-2.5 py-1 rounded-lg transition-colors flex items-center gap-1 cursor-pointer shadow-xs">
+                                <span>+</span> Skenario
+                            </button>
+                        </div>
+
+                        <!-- Live Search HTMX -->
+                        <div class="relative">
+                            <input type="text"
+                                name="q"
+                                placeholder="🔍 Cari nama skenario..."
+                                hx-get="/testcases/list-partial?project_id={{ selected_project_id or '' }}"
+                                hx-trigger="keyup delay:300ms"
+                                hx-target="#case-list-container"
+                                hx-swap="innerHTML"
+                                autocomplete="off"
+                                class="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium focus:outline-none focus:border-blue-500 focus:bg-white transition-all">
+                        </div>
+                    </div>
+
+                    <!-- 🟢 KUNCI PERBAIKAN: Pembungkus Scrollbar Permanen (Tidak Akan Tertimpa HTMX Swap) -->
+                    <div class="max-h-[480px] 2xl:max-h-[580px] overflow-y-scroll pr-1.5 space-y-2 custom-scrollbar">
+                        <!-- Target HTMX Swap (Hanya bagian dalam ini yang di-replace) -->
+                        <div id="case-list-container" class="space-y-2">
+                            {% include 'partials/case_list.html' %}
+                        </div>
+                    </div>
+
                 </div>
-            </div>
+
             </div>
 
-            <!-- Panel Kanan: Skenario Detail & Langkah Instruksi (Laptop: 7/12, Monitor Eksternal: 8/12) -->
+            <!-- Panel Kanan: Skenario Detail & Langkah Instruksi -->
             <div id="right-panel" class="col-span-12 lg:col-span-7 2xl:col-span-8">
                 <div class="bg-white p-12 rounded-2xl border border-slate-200 text-center text-slate-400 shadow-sm">
                     <p class="text-base font-medium">👈 Pilih salah satu skenario di panel kiri untuk mulai menyusun langkah tes.</p>
@@ -269,7 +309,7 @@
         <div class="bg-white rounded-2xl shadow-xl border border-slate-200 w-full max-w-md p-6 relative">
             <button type="button" 
                     onclick="closeProjectModal()" 
-                    class="absolute top-4 right-4 text-slate-400 hover:text-slate-600 p-1 transition-colors">
+                    class="absolute top-4 right-4 text-slate-400 hover:text-slate-600 p-1 transition-colors cursor-pointer">
                 ✕
             </button>
 
@@ -292,11 +332,11 @@
                 <div class="flex items-center justify-end gap-2 pt-2">
                     <button type="button" 
                             onclick="closeProjectModal()" 
-                            class="px-4 py-2 text-xs font-semibold text-slate-600 bg-slate-100 hover:bg-slate-200 rounded-xl transition-colors">
+                            class="px-4 py-2 text-xs font-semibold text-slate-600 bg-slate-100 hover:bg-slate-200 rounded-xl transition-colors cursor-pointer">
                         Batal
                     </button>
                     <button type="submit" 
-                            class="px-4 py-2 text-xs font-semibold text-white bg-blue-600 hover:bg-blue-700 rounded-xl shadow-md transition-colors">
+                            class="px-4 py-2 text-xs font-semibold text-white bg-blue-600 hover:bg-blue-700 rounded-xl shadow-md transition-colors cursor-pointer">
                         Simpan Proyek
                     </button>
                 </div>
@@ -309,7 +349,7 @@
         <div class="bg-white rounded-2xl shadow-xl border border-slate-200 w-full max-w-md p-6 relative">
             <button type="button" 
                     onclick="closeEditProjectModal()" 
-                    class="absolute top-4 right-4 text-slate-400 hover:text-slate-600 p-1 transition-colors">
+                    class="absolute top-4 right-4 text-slate-400 hover:text-slate-600 p-1 transition-colors cursor-pointer">
                 ✕
             </button>
 
@@ -332,17 +372,20 @@
                 <div class="flex items-center justify-end gap-2 pt-2">
                     <button type="button" 
                             onclick="closeEditProjectModal()" 
-                            class="px-4 py-2 text-xs font-semibold text-slate-600 bg-slate-100 hover:bg-slate-200 rounded-xl transition-colors">
+                            class="px-4 py-2 text-xs font-semibold text-slate-600 bg-slate-100 hover:bg-slate-200 rounded-xl transition-colors cursor-pointer">
                         Batal
                     </button>
                     <button type="submit" 
-                            class="px-4 py-2 text-xs font-semibold text-white bg-blue-600 hover:bg-blue-700 rounded-xl shadow-md transition-colors">
+                            class="px-4 py-2 text-xs font-semibold text-white bg-blue-600 hover:bg-blue-700 rounded-xl shadow-md transition-colors cursor-pointer">
                         Perbarui Proyek
                     </button>
                 </div>
             </form>
         </div>
     </div>
+
+    <!-- 🟢 Wadah Modal Pop-up HTMX Global (Kunci Mengatasi htmx:targetError) -->
+    <div id="modal-container"></div>
 
 </body>
 </html>

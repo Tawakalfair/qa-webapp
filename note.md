@@ -22,6 +22,7 @@ python init_db.py
 
 # 3. Pastikan FFmpeg terinstal di sistem OS
 # Ubuntu/Debian: sudo apt install -y ffmpeg
+# windows : winget install FFmpeg (powershell)
 
 # 4. Jalankan Web Server FastAPI (dengan Auto-Reload)
 uvicorn app.main:app --reload

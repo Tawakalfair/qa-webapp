@@ -132,7 +132,15 @@ INITIAL_COMMANDS = [
         "requires_value": True,
         "placeholder_selector": "Misal: .stock-row atau #total-price",
         "placeholder_value": "Misal: 15 / < 0 / background is red / disabled"
-    }
+    },
+    {
+        "code": "CLICK_SAME_TAB",
+        "label": "Klik (Paksa Tab Sama)",
+        "description": "Menghapus atribut target tab baru lalu mengklik elemen (mencegah tab baru terbuka).",
+        "requires_selector": True,
+        "requires_value": False,
+        "placeholder_selector": "a[target='_blank']"
+    },
 ]
 
 

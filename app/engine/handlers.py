@@ -36,6 +36,15 @@ async def execute_single_command(page: Page, step: Any, base_url: str, run_id: s
             # 2. Jika tertutup lapisan transparan, paksa klik lewat JavaScript DOM
             await page.eval_on_selector(selector, "el => el.click()")
 
+    elif cmd == "CLICK_SAME_TAB":
+        if not selector:
+            raise ValueError("Perintah CLICK_SAME_TAB membutuhkan target_selector.")
+        try:
+            # Menggunakan JavaScript DOM untuk menghapus atribut target (agar tidak buka tab baru) lalu mengkliknya
+            await page.eval_on_selector(selector, "el => { el.removeAttribute('target'); el.click(); }")
+        except Exception as e:
+            raise AssertionError(f"Gagal melakukan klik paksa di tab yang sama: {str(e)}")
+        
     elif cmd == "DOUBLE_CLICK":
         if not selector:
             raise ValueError("Perintah DOUBLE_CLICK membutuhkan target_selector.")
@@ -81,7 +90,16 @@ async def execute_single_command(page: Page, step: Any, base_url: str, run_id: s
     elif cmd == "SELECT_OPTION":
         if not selector:
             raise ValueError("Perintah SELECT_OPTION membutuhkan target_selector.")
-        await page.select_option(selector, label=val, timeout=10000)
+        
+        try:
+            # 1. Coba pilih berdasarkan Label (Teks yang terlihat di layar)
+            await page.select_option(selector, label=val, timeout=5000)
+        except Exception:
+            try:
+                # 2. Jika gagal, coba pilih berdasarkan atribut 'value' HTML
+                await page.select_option(selector, value=val, timeout=5000)
+            except Exception:
+                raise AssertionError(f"Gagal memilih! Opsi dengan label atau value '{val}' tidak ditemukan pada dropdown '{selector}'.")
 
     elif cmd == "CHECK":
         if not selector:
@@ -113,11 +131,59 @@ async def execute_single_command(page: Page, step: Any, base_url: str, run_id: s
             await page.evaluate(f"window.scrollBy(0, -{pixels})")
 
     elif cmd == "SCROLL_RIGHT":
-        pixels = int(val) if (val and val.isdigit()) else 300
-        if selector:
-            await page.eval_on_selector(selector, f"(el) => el.scrollBy({pixels}, 0)")
-        else:
-            await page.evaluate(f"window.scrollBy({pixels}, 0)")
+        pixels = int(val) if (val and str(val).isdigit()) else 300
+        target_sel = selector.strip() if selector and selector.strip() else "#mainDiv"
+        
+        try:
+            # Skrip Universal: Telusuri seluruh frame/iframe, ubah scrollLeft, dan paksa render
+            scroll_script = """
+            ([sel, px]) => {
+                // 1. Fungsi pencari elemen menembus seluruh iframe
+                function getTargetElement(s) {
+                    let el = document.querySelector(s) || document.getElementById('mainDiv');
+                    if (el) return { element: el, win: window };
+                    
+                    let iframes = document.querySelectorAll('iframe, frame');
+                    for (let iframe of iframes) {
+                        try {
+                            let iDoc = iframe.contentDocument || iframe.contentWindow.document;
+                            let iEl = iDoc.querySelector(s) || iDoc.getElementById('mainDiv');
+                            if (iEl) return { element: iEl, win: iframe.contentWindow };
+                        } catch(e) {}
+                    }
+                    return null;
+                }
+
+                let target = getTargetElement(sel);
+                if (target) {
+                    let el = target.element;
+                    let win = target.win;
+
+                    // 2. Ubah nilai scrollLeft secara langsung
+                    el.scrollLeft += px;
+                    
+                    // 3. Panggil fungsi sinkronisasi header tabel bawaan web
+                    if (typeof win.scrollTable === 'function') {
+                        win.scrollTable();
+                    } else if (typeof win.window.scrollTable === 'function') {
+                        win.window.scrollTable();
+                    } else {
+                        el.dispatchEvent(new Event('scroll', { bubbles: true }));
+                    }
+
+                    // 4. Paksa visual update agar perubahan langsung ter-render di video
+                    el.style.display = 'none';
+                    el.offsetHeight; // trigger reflow
+                    el.style.display = '';
+                    
+                    return el.scrollLeft;
+                }
+                return 0;
+            }
+            """
+            await page.evaluate(scroll_script, [target_sel, pixels])
+        except Exception as e:
+            raise AssertionError(f"Gagal menggeser elemen '{target_sel}': {str(e)}")
 
     elif cmd == "TAKE_SCREENSHOT_FULL":
         screenshot_dir = os.path.join("static", "screenshots")

@@ -18,16 +18,26 @@
                     </span>
                     {% endif %}
                 </div>
+                <!-- Cari blok tombol aksi header ini: -->
+                <div class="flex items-center gap-2">
+                    <!-- 📄 TOMBOL DUPLIKAT SKENARIO (BARU) -->
+                    <button type="button" 
+                            hx-get="/testcase/{{ case.id }}/copy-modal"
+                            hx-target="#modal-container"
+                            class="px-3 py-1.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-semibold border border-slate-300 transition-colors flex items-center gap-1.5 cursor-pointer shadow-sm">
+                        <span>📄</span> Duplikat
+                    </button>
 
-                <!-- TOMBOL EDIT SKENARIO -->
-                <button type="button"
-                        hx-get="/testcase/{{ case.id }}/edit-modal"
-                        hx-target="#modal-container"
-                        hx-swap="innerHTML"
-                        class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold text-slate-600 bg-slate-50 hover:bg-slate-100 border border-slate-200 transition-colors cursor-pointer shadow-2xs">
-                    <span>✏️</span> Edit Skenario
-                </button>
-            </div>
+                    <!-- Tombol Edit Skenario (Sudah Ada) -->
+                    <button type="button" 
+                            hx-get="/testcase/{{ case.id }}/edit-modal"
+                            hx-target="#modal-container"
+                            class="px-3 py-1.5 rounded-xl bg-blue-50 hover:bg-blue-100 text-blue-700 text-xs font-semibold border border-blue-200 transition-colors flex items-center gap-1.5 cursor-pointer shadow-sm">
+                        <span>✏️</span> Edit Skenario
+                    </button>
+                </div>
+                </div>
+                
 
            <!-- Judul Skenario & Tombol Jalankan Tes dengan Checkbox Rekam Video -->
             <div class="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-slate-100 pb-4 mb-4">
@@ -189,11 +199,24 @@
         </form>
     </div>
 
-    <!-- Section 3: Tabel Daftar Langkah -->
-    <div class="bg-white p-6 rounded-2xl shadow-sm border border-slate-200 space-y-4">
-        <h3 class="font-bold text-slate-900">Alur Pengujian Skenario</h3>
-        {% include 'partials/step_list.html' %}
-    </div>
+    <!-- Bagian Tabel Langkah Pengujian pada right_panel.html -->
+        <div class="mt-6 border-t border-slate-100 pt-5">
+            <div class="flex items-center justify-between mb-3">
+                <h3 class="font-bold text-xs text-slate-600 uppercase tracking-wider flex items-center gap-2">
+                    <span>⚡</span> Alur Pengujian (Test Steps)
+                </h3>
+                <span class="text-[11px] text-slate-400 font-medium">
+                    Gunakan tombol ⬆️/⬇️ untuk mengubah urutan
+                </span>
+            </div>
+
+            <!-- Container Scrollbar Internal (Max Height 520px) -->
+            <div class="max-h-[520px] overflow-y-auto border border-slate-200 rounded-xl bg-slate-50/50 shadow-inner">
+                <div id="steps-list-container">
+                    {% include 'partials/step_list.html' %}
+                </div>
+            </div>
+        </div>
 
     <!-- Container Modal Edit Skenario -->
     <div id="modal-container"></div>
