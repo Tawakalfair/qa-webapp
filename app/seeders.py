@@ -141,6 +141,14 @@ INITIAL_COMMANDS = [
         "requires_value": False,
         "placeholder_selector": "a[target='_blank']"
     },
+    {
+        "code": "VERIFY_DOWNLOAD",
+        "label": "Verifikasi Download (Evidence Visual)",
+        "description": "Mengklik tombol unduh, memverifikasi file berhasil diunduh, dan memunculkan badge bukti visual di layar.",
+        "requires_selector": True,
+        "requires_value": False,
+        "placeholder_selector": "#btn-download, a.btn-export, button[type='submit']"
+    },
 ]
 
 

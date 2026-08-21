@@ -1,0 +1,70 @@
+{% if run %}
+    <!-- 1. INDIKATOR STATUS AKHIR (SUCCESS / FAILED) -->
+    {% if run.status == 'SUCCESS' %}
+        <div class="p-4 rounded-xl border border-emerald-200 bg-emerald-50 text-emerald-900 mt-3 mb-4 shadow-xs">
+            <div class="flex items-center gap-2">
+                <span class="text-base">✅</span>
+                <span class="text-sm font-bold">LULUS! Pengujian selesai tanpa kendala.</span>
+            </div>
+        </div>
+    {% elif run.status == 'FAILED' %}
+        <div class="p-4 rounded-xl border border-rose-200 bg-rose-50 text-rose-900 mt-3 mb-4 shadow-xs">
+            <div class="flex items-center gap-2 mb-2">
+                <span class="text-base">❌</span>
+                <span class="text-sm font-bold">GAGAL: Skenario terhenti.</span>
+            </div>
+            {% if run.error_log %}
+                <pre class="text-xs font-mono bg-white/80 p-3 rounded-lg border border-rose-200 text-rose-800 overflow-x-auto max-h-60 leading-relaxed">{{ run.error_log }}</pre>
+            {% endif %}
+        </div>
+    {% endif %}
+
+    <!-- 2. PEMUTAR VIDEO & TOOLBAR AKSI (TAMPIL PADA SUCCESS & FAILED) -->
+    {% if run.video_url %}
+    <div id="video-card-{{ run.id }}" class="bg-slate-950 p-4 rounded-2xl shadow-inner space-y-3 border border-slate-900">
+        <div class="flex items-center justify-between">
+            <h4 class="text-xs font-bold text-slate-400 uppercase tracking-wider flex items-center gap-1.5">
+                <span>🎥</span> Rekaman Pengujian (.mp4)
+            </h4>
+            <span class="text-[10px] font-mono text-slate-500">{{ run.id }}</span>
+        </div>
+        
+        <!-- Pemutar Video HTML5 -->
+        <video controls muted playsinline class="w-full rounded-xl border border-slate-800 bg-black max-h-[360px] focus:outline-none">
+            <source src="{{ run.video_url }}" type="video/mp4">
+            Browser Anda tidak mendukung pemutar video HTML5.
+        </video>
+
+        <!-- Toolbar Aksi Video HTMX -->
+        <div id="video-action-container-{{ run.id }}" class="flex items-center justify-between gap-2 pt-2 border-t border-slate-800/80">
+            <div class="flex items-center gap-2">
+                <!-- Tombol Simpan Video Permanen -->
+                <button type="button"
+                        hx-post="/testrun/{{ run.id }}/keep-video"
+                        hx-target="#video-action-container-{{ run.id }}"
+                        hx-swap="outerHTML"
+                        class="px-3.5 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold transition-colors shadow-sm flex items-center gap-1.5 cursor-pointer">
+                    <span>💾</span> Simpan Video
+                </button>
+
+                <!-- Tombol Unduh Langsung MP4 -->
+                <a href="/testrun/{{ run.id }}/download-video"
+                   target="_blank"
+                   class="px-3.5 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 rounded-xl text-xs font-bold transition-colors flex items-center gap-1.5 cursor-pointer">
+                    <span>⬇️</span> Unduh MP4
+                </a>
+            </div>
+
+            <!-- Tombol Hapus / Jangan Simpan Video -->
+            <button type="button"
+                    hx-delete="/testrun/{{ run.id }}/delete-video"
+                    hx-target="#video-card-{{ run.id }}"
+                    hx-swap="outerHTML"
+                    hx-confirm="Yakin ingin menghapus video hasil tes ini dari server?"
+                    class="px-3.5 py-1.5 bg-slate-900 hover:bg-rose-950 text-slate-400 hover:text-rose-400 border border-slate-800 rounded-xl text-xs font-semibold transition-colors cursor-pointer">
+                🗑️ Jangan Simpan
+            </button>
+        </div>
+    </div>
+    {% endif %}
+{% endif %}

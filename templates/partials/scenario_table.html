@@ -1,0 +1,116 @@
+<div class="overflow-x-auto">
+    <table class="w-full text-left border-collapse">
+        <thead class="bg-slate-50 border-b border-slate-200 text-[11px] font-bold text-slate-500 uppercase tracking-wider sticky top-0">
+            <tr>
+                <th class="p-3 w-10 text-center">
+                    <input type="checkbox" 
+                           id="select-all-checkbox" 
+                           onclick="toggleSelectAllScenarios(this)" 
+                           class="w-4 h-4 text-indigo-600 rounded border-slate-300 focus:ring-indigo-500 cursor-pointer">
+                </th>
+                <th class="p-3 w-16 text-center">ID</th>
+                <th class="p-3">Scenario Name</th>
+                <th class="p-3">Project</th>
+                <th class="p-3">Type</th>
+                <th class="p-3 text-center">Steps</th>
+                <th class="p-3 text-center">Latest Status</th>
+                <th class="p-3 text-center w-28">Actions</th>
+            </tr>
+        </thead>
+        <tbody class="divide-y divide-slate-100 text-xs font-medium">
+            {% if test_cases %}
+                {% for case in test_cases %}
+                <tr class="hover:bg-slate-50/80 transition-colors group">
+                    <td class="p-3 text-center">
+                        <input type="checkbox" 
+                               name="case_ids" 
+                               value="{{ case.id }}" 
+                               onchange="updateBulkActionState()" 
+                               class="scenario-checkbox w-4 h-4 text-indigo-600 rounded border-slate-300 focus:ring-indigo-500 cursor-pointer">
+                    </td>
+
+                    <td class="p-3 text-center font-mono text-slate-400">#{{ case.id }}</td>
+
+                    <td class="p-3">
+                        <div class="font-bold text-slate-900">{{ case.name }}</div>
+                        <div class="text-[11px] font-mono text-slate-400 truncate max-w-xs">{{ case.base_url }}</div>
+                    </td>
+
+                    <td class="p-3">
+                        <span class="px-2.5 py-1 bg-slate-100 text-slate-700 font-bold rounded-lg text-[11px]">
+                            📁 {{ case.project.name if case.project else 'Default' }}
+                        </span>
+                    </td>
+
+                    <td class="p-3">
+                        <span class="px-2 py-0.5 rounded text-[10px] font-bold 
+                            {% if case.test_type == 'REGRESSION' %}bg-emerald-100 text-emerald-800 border border-emerald-200
+                            {% elif case.test_type == 'CHANGE_REQUEST' %}bg-blue-100 text-blue-800 border border-blue-200
+                            {% elif case.test_type == 'NEW_FEATURE' %}bg-purple-100 text-purple-800 border border-purple-200
+                            {% elif case.test_type == 'HOTFIX' %}bg-rose-100 text-rose-800 border border-rose-200
+                            {% else %}bg-slate-100 text-slate-700 border border-slate-200{% endif %}">
+                            {{ case.test_type }}
+                        </span>
+                    </td>
+
+                    <td class="p-3 text-center font-bold text-slate-600">
+                        {{ case.steps|length if case.steps else 0 }}
+                    </td>
+
+                    <td class="p-3 text-center whitespace-nowrap">
+                        {% if case.runs %}
+                            {% set latest_run = (case.runs | sort(attribute='executed_at', reverse=True) | first) %}
+                            {% if latest_run.status == 'SUCCESS' %}
+                                <span class="px-2.5 py-1 bg-emerald-50 text-emerald-700 font-bold border border-emerald-200 rounded-lg text-[10px] inline-flex items-center gap-1">
+                                    <span class="w-1.5 h-1.5 rounded-full bg-emerald-500"></span> PASS
+                                </span>
+                            {% elif latest_run.status == 'FAILED' %}
+                                <span class="px-2.5 py-1 bg-rose-50 text-rose-700 font-bold border border-rose-200 rounded-lg text-[10px] inline-flex items-center gap-1 cursor-help" 
+                                      title="{{ latest_run.error_log or 'Test Failed' }}">
+                                    <span class="w-1.5 h-1.5 rounded-full bg-rose-500"></span> FAIL
+                                </span>
+                            {% elif latest_run.status in ['RUNNING', 'PENDING'] %}
+                                <span class="px-2.5 py-1 bg-amber-50 text-amber-700 font-bold border border-amber-200 rounded-lg text-[10px] inline-flex items-center gap-1 animate-pulse">
+                                    <span class="w-1.5 h-1.5 rounded-full bg-amber-500"></span> {{ latest_run.status }}
+                                </span>
+                            {% else %}
+                                <span class="px-2.5 py-1 bg-slate-100 text-slate-400 font-bold rounded-lg text-[10px] inline-flex items-center gap-1">
+                                    <span class="w-1.5 h-1.5 rounded-full bg-slate-400"></span> UNTESTED
+                                </span>
+                            {% endif %}
+                        {% else %}
+                            <span class="px-2.5 py-1 bg-slate-100 text-slate-400 font-bold rounded-lg text-[10px] inline-flex items-center gap-1">
+                                <span class="w-1.5 h-1.5 rounded-full bg-slate-400"></span> UNTESTED
+                            </span>
+                        {% endif %}
+                    </td>
+                    
+                    <td class="p-3 text-center">
+                        <div class="flex items-center justify-center gap-1.5">
+                            <button type="button" 
+                                    hx-get="/scenarios/{{ case.id }}/detail-modal"
+                                    hx-target="#modal-container"
+                                    title="View & Edit Scenario Detail" 
+                                    class="px-2.5 py-1 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 font-bold text-xs rounded-lg transition-colors border border-indigo-200 flex items-center gap-1 cursor-pointer">
+                                👁️ Detail
+                            </button>
+
+                            <a href="/?project_id={{ case.project_id }}&selected_id={{ case.id }}" 
+                            title="Open in Workspace Editor" 
+                            class="px-2.5 py-1 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs rounded-lg transition-colors border border-slate-300 flex items-center gap-1">
+                                ⚡ Open
+                            </a>
+                        </div>
+                    </td>
+                </tr>
+                {% endfor %}
+            {% else %}
+                <tr>
+                    <td colspan="8" class="p-8 text-center text-slate-400 italic">
+                        No scenarios found matching your criteria.
+                    </td>
+                </tr>
+            {% endif %}
+        </tbody>
+    </table>
+</div>

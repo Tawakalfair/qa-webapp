@@ -1,0 +1,45 @@
+<div class="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 backdrop-blur-sm">
+    <div class="bg-white rounded-2xl shadow-2xl border border-slate-200 w-full max-w-lg p-6 relative">
+        
+        <button type="button" 
+                onclick="document.getElementById('modal-container').innerHTML = ''" 
+                class="absolute top-4 right-4 text-slate-400 hover:text-slate-600 p-1 transition-colors cursor-pointer text-base font-bold">
+            ✕
+        </button>
+
+        <div class="mb-5 border-b border-slate-200 pb-4">
+            <h2 class="text-xl font-bold text-slate-900 flex items-center gap-2">
+                <span>📊</span> Export UT Documents
+            </h2>
+            <p class="text-xs text-slate-500 mt-1">Anda akan mengekspor dokumen Unit Test (Excel) untuk skenario yang dipilih.</p>
+        </div>
+
+        <div class="bg-emerald-50 text-emerald-800 border border-emerald-200 p-3 rounded-xl mb-5 text-sm font-semibold flex items-center gap-2">
+            <span>✅</span> {{ selected_cases|length }} Skenario siap diekspor
+        </div>
+
+        <ul class="text-xs font-mono text-slate-600 mb-6 max-h-40 overflow-y-auto space-y-1 bg-slate-50 p-3 rounded-xl border border-slate-200">
+            {% for case in selected_cases %}
+                <li>- [{{ case.project.name[:10] }}] {{ case.name }}</li>
+            {% endfor %}
+        </ul>
+
+        <form action="/export/bulk-download" method="POST" class="flex justify-end gap-2">
+            {% for cid in case_ids %}
+                <input type="hidden" name="case_ids" value="{{ cid }}">
+            {% endfor %}
+
+            <button type="button" 
+                    onclick="document.getElementById('modal-container').innerHTML = ''" 
+                    class="px-4 py-2 text-xs font-bold text-slate-600 bg-slate-100 hover:bg-slate-200 rounded-xl transition-colors cursor-pointer">
+                Batal
+            </button>
+            <button type="submit" 
+                    onclick="setTimeout(() => document.getElementById('modal-container').innerHTML = '', 1000)"
+                    class="px-5 py-2 text-xs font-bold text-white bg-emerald-600 hover:bg-emerald-700 rounded-xl shadow-md transition-colors cursor-pointer flex items-center gap-1.5">
+                <span>⬇️</span> Download Excel
+            </button>
+        </form>
+
+    </div>
+</div>

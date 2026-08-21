@@ -1,0 +1,140 @@
+<div class="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 backdrop-blur-sm animate-fadeIn">
+    <div class="bg-white rounded-2xl shadow-2xl border border-slate-200 w-full max-w-xl p-6 relative max-h-[90vh] overflow-y-auto">
+        
+        <!-- Close Modal Button -->
+        <button type="button" 
+                onclick="document.getElementById('modal-container').innerHTML = ''" 
+                class="absolute top-4 right-4 text-slate-400 hover:text-slate-600 p-1 transition-colors cursor-pointer">
+            ✕
+        </button>
+
+        <div class="mb-5">
+            <h3 class="text-lg font-bold text-slate-900 flex items-center gap-2">
+                <span>✨</span> Create New Test Scenario
+            </h3>
+            <p class="text-xs text-slate-500 mt-1">
+                Fill in the basic scenario details and optional UT Document metadata below.
+            </p>
+        </div>
+
+        <form action="/testcase/new" method="POST" class="space-y-4">
+            
+            <!-- Target Project Selection -->
+            <div>
+                <label class="block text-xs font-bold text-slate-600 uppercase tracking-wider mb-1">
+                    Target Project <span class="text-red-500">*</span>
+                </label>
+                <select name="project_id" required class="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 focus:outline-none focus:border-blue-500 text-sm font-semibold text-slate-700 bg-white">
+                    {% for proj in projects %}
+                    <option value="{{ proj.id }}" {% if selected_project_id and proj.id == selected_project_id %}selected{% endif %}>
+                        📁 {{ proj.name }}
+                    </option>
+                    {% endfor %}
+                </select>
+            </div>
+
+            <!-- Scenario Name -->
+            <div>
+                <label class="block text-xs font-bold text-slate-600 uppercase tracking-wider mb-1">
+                    Scenario Name <span class="text-red-500">*</span>
+                </label>
+                <input type="text" name="name" required placeholder="e.g., Test Admin Login & Dashboard Navigation" 
+                       class="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 focus:outline-none focus:border-blue-500 text-sm font-medium">
+            </div>
+
+            <!-- Base URL -->
+            <div>
+                <label class="block text-xs font-bold text-slate-600 uppercase tracking-wider mb-1">
+                    Base URL
+                </label>
+                <input type="url" name="base_url" placeholder="https://example.com" 
+                       class="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 focus:outline-none focus:border-blue-500 text-sm font-mono">
+            </div>
+
+            <!-- Test Type & Reference Number Grid -->
+            <div class="grid grid-cols-2 gap-3">
+                <div>
+                    <label class="block text-xs font-bold text-slate-600 uppercase tracking-wider mb-1">Test Type</label>
+                    <select name="test_type" class="w-full px-3 py-2 rounded-xl border border-slate-300 text-xs font-semibold text-slate-700 bg-white">
+                        <option value="REGRESSION" selected>🟢 Regression</option>
+                        <option value="CHANGE_REQUEST">🔵 Change Request</option>
+                        <option value="NEW_FEATURE">🟣 New Feature</option>
+                        <option value="HOTFIX">🔴 Hotfix</option>
+                    </select>
+                </div>
+                <div>
+                    <label class="block text-xs font-bold text-slate-600 uppercase tracking-wider mb-1">CR / Ref No. (Optional)</label>
+                    <input type="text" name="reference_number" placeholder="CR-2026-004" 
+                           class="w-full px-3 py-2 rounded-xl border border-slate-300 text-xs font-mono">
+                </div>
+            </div>
+
+            <!-- Collapsible Accordion: UT Document Optional Metadata -->
+            <details class="border border-slate-200 rounded-xl bg-slate-50 overflow-hidden group">
+                <summary class="px-4 py-2.5 text-xs font-bold text-slate-700 cursor-pointer select-none flex items-center justify-between hover:bg-slate-100 transition-colors">
+                    <span>📋 Detail UT Document Matrix (Optional)</span>
+                    <span class="text-slate-400 group-open:rotate-180 transition-transform">▼</span>
+                </summary>
+                <div class="p-4 space-y-3 bg-white border-t border-slate-200">
+                    <p class="text-[11px] text-slate-400 italic mb-2">
+                        Note: If left empty, default content will be automatically generated upon Excel export.
+                    </p>
+                    <div class="grid grid-cols-2 gap-3">
+                        <div>
+                            <label class="block text-[10px] font-bold text-slate-500 uppercase mb-1">Theme</label>
+                            <input type="text" name="ut_theme" placeholder="Auto: Project Name" class="w-full px-2.5 py-1.5 border border-slate-300 rounded-lg text-xs">
+                        </div>
+                        <div>
+                            <label class="block text-[10px] font-bold text-slate-500 uppercase mb-1">Function Name</label>
+                            <input type="text" name="ut_function_name" placeholder="Auto: Scenario Name" class="w-full px-2.5 py-1.5 border border-slate-300 rounded-lg text-xs">
+                        </div>
+                    </div>
+                    <div class="grid grid-cols-2 gap-3">
+                        <div>
+                            <label class="block text-[10px] font-bold text-slate-500 uppercase mb-1">Classification</label>
+                            <select name="ut_classification" class="w-full px-2.5 py-1.5 border border-slate-300 rounded-lg text-xs bg-white">
+                                <option value="">Auto: Normal</option>
+                                <option value="Normal">Normal</option>
+                                <option value="Abnormal (Error Handling)">Abnormal (Error Handling)</option>
+                                <option value="Boundary Condition">Boundary Condition</option>
+                            </select>
+                        </div>
+                        <div>
+                            <label class="block text-[10px] font-bold text-slate-500 uppercase mb-1">Condition 1</label>
+                            <input type="text" name="ut_condition_1" placeholder="Auto: Base URL" class="w-full px-2.5 py-1.5 border border-slate-300 rounded-lg text-xs">
+                        </div>
+                    </div>
+                    <div>
+                        <label class="block text-[10px] font-bold text-slate-500 uppercase mb-1">Condition 2</label>
+                        <input type="text" name="ut_condition_2" placeholder="Auto: '-'" class="w-full px-2.5 py-1.5 border border-slate-300 rounded-lg text-xs">
+                    </div>
+                    <div>
+                        <label class="block text-[10px] font-bold text-slate-500 uppercase mb-1">Action Description</label>
+                        <textarea name="ut_action" rows="2" placeholder="Auto: Step #1 Description" class="w-full px-2.5 py-1.5 border border-slate-300 rounded-lg text-xs"></textarea>
+                    </div>
+                    <div>
+                        <label class="block text-[10px] font-bold text-slate-500 uppercase mb-1">How to test</label>
+                        <textarea name="ut_how_to_test" rows="2" placeholder="Auto: Compilation of Test Steps" class="w-full px-2.5 py-1.5 border border-slate-300 rounded-lg text-xs"></textarea>
+                    </div>
+                    <div>
+                        <label class="block text-[10px] font-bold text-slate-500 uppercase mb-1">Expected results</label>
+                        <textarea name="ut_expected_results" rows="2" placeholder="Auto: Compilation of VERIFY steps" class="w-full px-2.5 py-1.5 border border-slate-300 rounded-lg text-xs"></textarea>
+                    </div>
+                </div>
+            </details>
+
+            <!-- Actions -->
+            <div class="flex items-center justify-end gap-2 pt-3 border-t border-slate-100">
+                <button type="button" 
+                        onclick="document.getElementById('modal-container').innerHTML = ''" 
+                        class="px-4 py-2 text-xs font-bold text-slate-600 bg-slate-100 hover:bg-slate-200 rounded-xl transition-colors cursor-pointer">
+                    Cancel
+                </button>
+                <button type="submit" 
+                        class="px-5 py-2 text-xs font-bold text-white bg-blue-600 hover:bg-blue-700 rounded-xl shadow-md transition-colors cursor-pointer">
+                    Save Scenario
+                </button>
+            </div>
+        </form>
+    </div>
+</div>

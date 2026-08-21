@@ -1,0 +1,204 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{ title }}</title>
+    
+    <script src="/static/js/htmx.min.js" defer></script>
+    <script src="/static/js/tailwindcss.js" defer></script>
+    <script src="/static/js/app.js" defer></script>
+</head>
+<body class="bg-slate-100 min-h-screen font-sans text-slate-800 antialiased">
+    
+    <!-- Toast Notification Container -->
+    <div id="toast-container" class="fixed top-5 right-5 z-50 flex flex-col gap-2"></div>
+
+    <!-- Top Navbar -->
+    <header class="bg-white border-b border-slate-200 sticky top-0 z-40 shadow-sm">
+        <div class="max-w-[1700px] mx-auto px-6 xl:px-10 py-3 flex items-center justify-between">
+            
+            <!-- Logo & Main Navigation Links -->
+            <div class="flex items-center space-x-8">
+                <div class="flex items-center space-x-3">
+                    <div class="w-10 h-10 bg-blue-600 text-white rounded-xl flex items-center justify-center font-black text-xl shadow-lg shadow-blue-500/30">
+                        QA
+                    </div>
+                    <div>
+                        <h1 class="font-bold text-lg text-slate-900 leading-tight">QA Automata</h1>
+                        <p class="text-[11px] text-slate-500">Visual Web Automation Platform</p>
+                    </div>
+                </div>
+
+                <!-- Main Menu Tabs -->
+                <nav class="hidden md:flex items-center gap-1 border-l border-slate-200 pl-6">
+                    <a href="/" class="px-3.5 py-2 rounded-xl text-xs font-bold transition-colors text-slate-600 hover:bg-slate-100 flex items-center gap-1.5">
+                        <span>📋</span> Workspace
+                    </a>
+                    <a href="/scenarios" class="px-3.5 py-2 rounded-xl text-xs font-bold transition-colors bg-indigo-50 text-indigo-700 flex items-center gap-1.5">
+                        <span>📂</span> Scenario Inventory
+                    </a>
+                </nav>
+            </div>
+
+            <!-- User Info & Logout Button -->
+            <div class="flex items-center gap-3">
+                <span class="text-xs font-bold text-slate-700">👋 {{ current_user.username }}</span>
+                <form action="/logout" method="POST" class="inline m-0 p-0">
+                    <button type="submit" class="text-xs text-rose-600 hover:text-rose-700 font-bold hover:underline cursor-pointer">
+                        Logout
+                    </button>
+                </form>
+            </div>
+        </div>
+    </header>
+
+    <!-- Main Container -->
+    <main class="max-w-[1700px] mx-auto px-6 xl:px-10 py-6 space-y-6">
+        
+        <!-- Header & Action Bar -->
+        <div class="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
+            <div>
+                <h2 class="text-lg font-bold text-slate-900 flex items-center gap-2">
+                    <span>📂</span> Scenario Inventory Management
+                </h2>
+                <p class="text-xs text-slate-500">Manage, search, and perform bulk operations across all your test scenarios.</p>
+            </div>
+
+            <!-- Filter & Search Inputs -->
+            <form hx-get="/scenarios/table-partial" 
+                hx-target="#scenario-table-container" 
+                hx-swap="innerHTML"
+                id="filter-form"
+                class="flex items-center gap-2 w-full md:w-auto">
+                
+                <!-- Project Selector -->
+                <select name="project_id" 
+                        id="filter-project-select"
+                        onchange="this.form.dispatchEvent(new Event('submit'))" 
+                        class="px-3 py-2 border border-slate-300 rounded-xl text-xs font-semibold text-slate-700 bg-slate-50 focus:outline-none focus:border-indigo-500">
+                    <option value="">📁 All Projects</option>
+                    {% for proj in projects %}
+                        <option value="{{ proj.id }}" {% if selected_project_id == proj.id %}selected{% endif %}>
+                            {{ proj.name }}
+                        </option>
+                    {% endfor %}
+                </select>
+
+                <!-- Search Input -->
+                <input type="text" 
+                       name="q" 
+                       id="filter-search-input"
+                       value="{{ search_query }}"
+                       placeholder="🔍 Search scenario..." 
+                       hx-trigger="keyup delay:300ms"
+                       class="px-3 py-2 border border-slate-300 rounded-xl text-xs font-medium bg-slate-50 focus:outline-none focus:border-indigo-500 w-48 md:w-64">
+            </form>
+        </div>
+
+        <!-- Bulk Action Toolbar -->
+        <div class="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm flex items-center justify-between gap-4">
+            <div class="flex items-center gap-2">
+                <span id="selected-count-badge" class="px-3 py-1 bg-slate-100 text-slate-600 font-bold text-xs rounded-xl border border-slate-200">
+                    0 selected
+                </span>
+
+                <!-- Bulk Duplicate Button -->
+                <button type="button" 
+                        id="bulk-duplicate-btn"
+                        disabled
+                        hx-post="/scenarios/bulk-copy-modal"
+                        hx-target="#modal-container"
+                        hx-include="select[name='project_id'], input[name='q'], input[name='case_ids']:checked"
+                        class="px-4 py-1.5 text-xs font-bold text-indigo-700 bg-indigo-50 hover:bg-indigo-100 border border-indigo-200 rounded-xl transition-all flex items-center gap-1.5 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed">
+                    <span>📄</span> Batch Duplicate
+                </button>
+
+                <!-- Bulk Delete Button -->
+                <button type="button" 
+                        id="bulk-delete-btn"
+                        disabled
+                        hx-post="/scenarios/bulk-delete"
+                        hx-target="#scenario-table-container"
+                        hx-swap="innerHTML"
+                        hx-include="select[name='project_id'], input[name='q'], input[name='case_ids']:checked"
+                        hx-confirm="Are you sure you want to delete all selected scenarios? This action cannot be undone."
+                        class="px-4 py-1.5 text-xs font-bold text-rose-700 bg-rose-50 hover:bg-rose-100 border border-rose-200 rounded-xl transition-all flex items-center gap-1.5 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed">
+                    <span>🗑️</span> Batch Delete
+                </button>
+
+                <!-- 🟢 Bulk Run Test Button (Eksplisit Include Element) -->
+                <button type="button" 
+                        id="bulk-run-btn"
+                        disabled
+                        hx-post="/scenarios/bulk-run"
+                        hx-target="#batch-progress-container"
+                        hx-include="select[name='project_id'], input[name='q'], input[name='case_ids']:checked"
+                        class="px-3 py-1.5 rounded-xl bg-indigo-50 hover:bg-indigo-100 text-indigo-700 text-xs font-semibold border border-indigo-200 transition-colors flex items-center gap-1.5 shadow-sm disabled:opacity-50 disabled:cursor-not-allowed">
+                    <span>▶️</span> Run Selected
+                </button>
+
+                <!-- Bulk Export UT Document Button -->
+                <button type="button" 
+                        id="bulk-export-btn"
+                        disabled
+                        hx-post="/export/bulk-modal"
+                        hx-target="#modal-container"
+                        hx-include="select[name='project_id'], input[name='q'], input[name='case_ids']:checked"
+                        class="px-3 py-1.5 rounded-xl bg-emerald-50 hover:bg-emerald-100 text-emerald-700 text-xs font-semibold border border-emerald-200 transition-colors flex items-center gap-1.5 shadow-sm disabled:opacity-50 disabled:cursor-not-allowed">
+                    <span>📊</span> Export Selected
+                </button>
+            </div>
+        </div>
+        
+        <div id="batch-progress-container" class="mb-4"></div>
+
+        <!-- Scenario Table Container -->
+        <div id="scenario-table-container" 
+            hx-on::after-swap="updateBulkActionState()" 
+            class="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
+            {% include 'partials/scenario_table.html' %}
+        </div>
+
+    </main>
+
+    <!-- Global Modal Container -->
+    <div id="modal-container"></div>
+
+    <!-- Client-side Javascript for Checkbox State Handling -->
+    <script>
+    function toggleSelectAllScenarios(masterCheckbox) {
+        const checkboxes = document.querySelectorAll('.scenario-checkbox');
+        checkboxes.forEach(cb => cb.checked = masterCheckbox.checked);
+        updateBulkActionState();
+    }
+
+    function updateBulkActionState() {
+        const checkedBoxes = document.querySelectorAll("input[name='case_ids']:checked");
+        const countBadge = document.getElementById('selected-count-badge');
+        
+        const btnDuplicate = document.getElementById('bulk-duplicate-btn');
+        const btnDelete = document.getElementById('bulk-delete-btn');
+        const btnRun = document.getElementById('bulk-run-btn');
+        const btnExport = document.getElementById('bulk-export-btn');
+
+        const hasSelection = checkedBoxes.length > 0;
+
+        if (countBadge) {
+            countBadge.textContent = `${checkedBoxes.length} selected`;
+        }
+
+        if (btnDuplicate) btnDuplicate.disabled = !hasSelection;
+        if (btnDelete) btnDelete.disabled = !hasSelection;
+        if (btnRun) btnRun.disabled = !hasSelection;
+        if (btnExport) btnExport.disabled = !hasSelection;
+    }
+
+    document.body.addEventListener('htmx:afterSettle', function() {
+        if (typeof updateBulkActionState === 'function') {
+            updateBulkActionState();
+        }
+    });
+    </script>
+</body>
+</html>

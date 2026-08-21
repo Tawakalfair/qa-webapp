@@ -55,7 +55,7 @@ class TestCase(Base):
         ForeignKey("projects.id", ondelete="CASCADE"), nullable=False
     )
     name: Mapped[str] = mapped_column(String(100), nullable=False)
-    base_url: Mapped[str] = mapped_column(String(255), nullable=False)
+    base_url: Mapped[str] = mapped_column(String(255), nullable=True)
     test_type: Mapped[str] = mapped_column(String(30), default="REGRESSION")
     reference_number: Mapped[Optional[str]] = mapped_column(String(50), nullable=True)
 

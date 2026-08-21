@@ -1,0 +1,377 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{ title }}</title>
+    
+    <!-- Local Static JS Imports -->
+    <script src="/static/js/htmx.min.js" defer></script>
+    <script src="/static/js/tailwindcss.js" defer></script>
+    <script src="/static/js/app.js" defer></script>
+
+    <!-- Custom Scrollbar Styling -->
+    <style>
+        .custom-scrollbar::-webkit-scrollbar {
+            width: 6px;
+        }
+        .custom-scrollbar::-webkit-scrollbar-track {
+            background: #f1f5f9;
+            border-radius: 8px;
+        }
+        .custom-scrollbar::-webkit-scrollbar-thumb {
+            background: #cbd5e1;
+            border-radius: 8px;
+        }
+        .custom-scrollbar::-webkit-scrollbar-thumb:hover {
+            background: #94a3b8;
+        }
+    </style>
+</head>
+<body class="bg-slate-100 min-h-screen font-sans text-slate-800 antialiased">
+    
+    <!-- Toast Notification Container -->
+    <div id="toast-container" class="fixed top-5 right-5 z-50 flex flex-col gap-2"></div>
+
+    <!-- Top Navbar -->
+    <header class="bg-white border-b border-slate-200 sticky top-0 z-40 shadow-sm">
+        <div class="max-w-[1700px] mx-auto px-6 xl:px-10 py-3 flex items-center justify-between">
+            
+            <!-- Logo & Main Navigation Links -->
+            <div class="flex items-center space-x-8">
+                <div class="flex items-center space-x-3">
+                    <div class="w-10 h-10 bg-blue-600 text-white rounded-xl flex items-center justify-center font-black text-xl shadow-lg shadow-blue-500/30">
+                        QA
+                    </div>
+                    <div>
+                        <h1 class="font-bold text-lg text-slate-900 leading-tight">QA Automata</h1>
+                        <p class="text-[11px] text-slate-500">Visual Web Automation Platform</p>
+                    </div>
+                </div>
+
+                <!-- Main Menu Tabs -->
+                <nav class="hidden md:flex items-center gap-1 border-l border-slate-200 pl-6">
+                    <a href="/" class="px-3.5 py-2 rounded-xl text-xs font-bold transition-colors bg-blue-50 text-blue-700 flex items-center gap-1.5">
+                        <span>📋</span> Workspace
+                    </a>
+                    <a href="/scenarios" class="px-3.5 py-2 rounded-xl text-xs font-bold transition-colors text-slate-600 hover:bg-slate-100 flex items-center gap-1.5">
+                        <span>📂</span> Scenario Inventory
+                    </a>
+                </nav>
+            </div>
+
+            <!-- Header Action Buttons -->
+            <div class="flex items-center gap-3">
+                <!-- User Info & Logout Button -->
+                <div class="flex items-center gap-3 mr-2 pr-4 border-r border-slate-200">
+                    <span class="text-xs font-bold text-slate-700">👋 {{ current_user.username }}</span>
+                    <form action="/logout" method="POST" class="inline m-0 p-0">
+                        <button type="submit" class="text-xs text-rose-600 hover:text-rose-700 font-bold hover:underline cursor-pointer">
+                            Logout
+                        </button>
+                    </form>
+                </div>
+
+                <!-- New Project Button -->
+                <button type="button" 
+                        onclick="openProjectModal()" 
+                        class="bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs px-3.5 py-2 rounded-xl transition-colors flex items-center gap-1.5 border border-slate-300 cursor-pointer">
+                    <span>➕</span> New Project
+                </button>
+
+                <!-- Export UT Document Modal Button -->
+                <button type="button" 
+                        hx-get="/export/modal?project_id={{ selected_project_id or '' }}"
+                        hx-target="#modal-container"
+                        class="bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs px-4 py-2 rounded-xl shadow-md transition-all flex items-center gap-2 cursor-pointer">
+                    <span>📊</span> Export UT Document
+                </button>
+            </div>
+        </div>
+    </header>
+
+    <!-- Filter Bar Toolbar -->
+    <div class="bg-white border-b border-slate-200">
+        <div class="max-w-[1700px] mx-auto px-6 xl:px-10 py-2.5 flex items-center justify-between gap-4">
+            <div class="flex items-center gap-3 w-full">
+                <span class="text-[11px] font-bold uppercase tracking-wider text-slate-400">Filter:</span>
+                
+                <form action="/" method="GET" class="flex items-center gap-2">
+                    <!-- Searchable Custom Project Dropdown -->
+                    <div class="relative inline-block text-left" id="project-dropdown-wrapper">
+                        <!-- Trigger Button -->
+                        <button type="button" 
+                                onclick="toggleProjectDropdown()" 
+                                class="px-3 py-1.5 border border-slate-300 rounded-xl text-xs font-semibold text-slate-700 bg-slate-50 hover:bg-slate-100 flex items-center gap-1.5 focus:outline-none focus:border-blue-500">
+                            <span>📁 {{ (projects | selectattr('id', 'equalto', selected_project_id) | first).name if selected_project_id else 'All Projects' }}</span>
+                            <span class="text-[10px] text-slate-400">▼</span>
+                        </button>
+
+                        <!-- Floating Searchable Panel -->
+                        <div id="project-dropdown-menu" class="hidden absolute left-0 mt-1 w-64 bg-white rounded-xl shadow-xl border border-slate-200 z-50 p-2">
+                            <!-- Search Input -->
+                            <input type="text" 
+                                id="project-search-input"
+                                placeholder="🔍 Search 100+ projects..." 
+                                onkeyup="filterProjectList(this.value)"
+                                class="w-full px-2.5 py-1.5 mb-2 border border-slate-200 rounded-lg text-xs font-medium focus:outline-none focus:border-blue-500">
+
+                            <!-- Scrollable Project Options List -->
+                            <div class="max-h-56 overflow-y-auto space-y-1 custom-scrollbar" id="project-options-list">
+                                <a href="/?test_type={{ selected_test_type or '' }}" 
+                                class="project-item block px-2.5 py-1.5 text-xs text-slate-700 hover:bg-blue-50 hover:text-blue-600 rounded-lg font-medium">
+                                    📁 All Projects
+                                </a>
+                                {% for proj in projects %}
+                                <a href="/?project_id={{ proj.id }}&test_type={{ selected_test_type or '' }}" 
+                                data-name="{{ proj.name|lower }}"
+                                class="project-item block px-2.5 py-1.5 text-xs {% if selected_project_id == proj.id %}bg-blue-50 text-blue-700 font-bold{% else %}text-slate-700 hover:bg-blue-50 hover:text-blue-600{% endif %} rounded-lg">
+                                    📁 {{ proj.name }}
+                                </a>
+                                {% endfor %}
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Select Test Type -->
+                    <select name="test_type" onchange="this.form.submit()" class="px-3 py-1.5 border border-slate-300 rounded-xl text-xs font-semibold text-slate-700 bg-slate-50 focus:outline-none focus:border-blue-500">
+                        <option value="">🏷️ All Test Types</option>
+                        <option value="REGRESSION" {% if selected_test_type == 'REGRESSION' %}selected{% endif %}>🟢 Regression</option>
+                        <option value="CHANGE_REQUEST" {% if selected_test_type == 'CHANGE_REQUEST' %}selected{% endif %}>🔵 Change Request</option>
+                        <option value="NEW_FEATURE" {% if selected_test_type == 'NEW_FEATURE' %}selected{% endif %}>🟣 New Feature</option>
+                        <option value="HOTFIX" {% if selected_test_type == 'HOTFIX' %}selected{% endif %}>🔴 Hotfix</option>
+                    </select>
+
+                    {% if selected_project_id or selected_test_type %}
+                    <a href="/" class="text-xs text-red-500 hover:underline font-bold ml-1">Reset Filter</a>
+                    {% endif %}
+                </form>
+
+                <!-- Edit & Delete Buttons for Active Project -->
+                {% if selected_project_id %}
+                    {% for proj in projects %}
+                        {% if selected_project_id == proj.id %}
+                        <div class="flex items-center gap-1 ml-auto border-l border-slate-200 pl-4">
+                            <button type="button"
+                                    onclick="openEditProjectModal('{{ proj.id }}', '{{ proj.name|e }}', '{{ (proj.description or '')|e }}')"
+                                    title="Edit Project Name/Description"
+                                    class="px-2.5 py-1.5 text-slate-600 hover:text-blue-600 bg-slate-50 hover:bg-blue-50 border border-slate-300 rounded-xl transition-colors text-xs font-semibold flex items-center gap-1 cursor-pointer">
+                                ✏️ Edit Project
+                            </button>
+                            <form action="/projects/{{ proj.id }}/delete" method="POST" 
+                                  onsubmit="return confirm('Are you sure you want to delete project \'{{ proj.name|e }}\'? All test scenarios inside will be permanently deleted!')">
+                                <button type="submit"
+                                        title="Delete Project"
+                                        class="px-2.5 py-1.5 text-slate-600 hover:text-red-600 bg-slate-50 hover:bg-red-50 border border-slate-300 rounded-xl transition-colors text-xs font-semibold flex items-center gap-1 cursor-pointer">
+                                    🗑️ Delete Project
+                                </button>
+                            </form>
+                        </div>
+                        {% endif %}
+                    {% endfor %}
+                {% endif %}
+            </div>
+        </div>
+    </div>
+
+    <!-- Main Container Layout -->
+    <main class="max-w-[1700px] mx-auto px-6 xl:px-10 py-6">
+        <div class="grid grid-cols-12 gap-6 items-start">
+            
+            <!-- Left Side Panel: Full-Height Scenario List -->
+            <div class="col-span-12 lg:col-span-5 2xl:col-span-4 bg-white rounded-2xl border border-slate-200 p-4 shadow-sm flex flex-col h-[calc(100vh-170px)] sticky top-24">
+                
+                <!-- Sidebar Header & Search Bar -->
+                <div class="mb-3 space-y-2.5 flex-shrink-0">
+                    <div class="flex items-center justify-between">
+                        <h2 class="font-bold text-xs uppercase tracking-wider text-slate-700 flex items-center gap-1.5">
+                            <span>📋</span> Scenario List
+                        </h2>
+                        <!-- Trigger Button for Create Scenario Modal -->
+                        <button type="button" 
+                                hx-get="/testcase/new-modal?project_id={{ selected_project_id or '' }}"
+                                hx-target="#modal-container"
+                                class="text-xs bg-blue-600 hover:bg-blue-700 text-white font-bold px-3 py-1.5 rounded-xl transition-colors flex items-center gap-1 cursor-pointer shadow-xs">
+                            <span>+</span> New Scenario
+                        </button>
+                    </div>
+
+                    <!-- Live Search HTMX Input -->
+                    <div class="relative">
+                        <input type="text"
+                               name="q"
+                               placeholder="🔍 Search scenario name..."
+                               hx-get="/testcases/list-partial?project_id={{ selected_project_id or '' }}"
+                               hx-trigger="keyup delay:300ms"
+                               hx-target="#case-list-container"
+                               hx-swap="innerHTML"
+                               autocomplete="off"
+                               class="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium focus:outline-none focus:border-blue-500 focus:bg-white transition-all">
+                    </div>
+                </div>
+
+                <!-- Scrollable Scenario List Container -->
+                <div class="flex-1 overflow-y-scroll pr-1.5 space-y-2 custom-scrollbar">
+                    <div id="case-list-container" class="space-y-2">
+                        {% include 'partials/case_list.html' %}
+                    </div>
+                </div>
+            </div>
+
+            <!-- Right Side Panel: Workspace Editor (Steps, UT Metadata, Execution) -->
+            <div id="right-panel" class="col-span-12 lg:col-span-7 2xl:col-span-8">
+                {% if case %}
+                    <!-- 🟢 Otomatis render workspace editor jika skenario dipilih dari tombol Open di Inventory -->
+                    {% include 'partials/right_panel.html' %}
+                {% else %}
+                    <div class="bg-white p-12 rounded-2xl border border-slate-200 text-center text-slate-400 shadow-sm min-h-[calc(100vh-170px)] flex flex-col items-center justify-center">
+                        <p class="text-base font-medium">👈 Select a scenario from the left list to open the workspace editor.</p>
+                    </div>
+                {% endif %}
+            </div>
+
+        </div>
+    </main>
+
+    <!-- Create Project Modal -->
+    <div id="project-modal" class="hidden fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 backdrop-blur-sm">
+        <div class="bg-white rounded-2xl shadow-xl border border-slate-200 w-full max-w-md p-6 relative">
+            <button type="button" 
+                    onclick="closeProjectModal()" 
+                    class="absolute top-4 right-4 text-slate-400 hover:text-slate-600 p-1 transition-colors cursor-pointer">
+                ✕
+            </button>
+
+            <h3 class="text-base font-bold text-slate-900 mb-1 flex items-center gap-2">
+                <span>📁</span> Create New Project
+            </h3>
+            <p class="text-xs text-slate-500 mb-4">Group scenarios by target application or module.</p>
+
+            <form action="/projects/new" method="POST" class="space-y-4">
+                <div>
+                    <label class="block text-xs font-semibold text-slate-600 uppercase mb-1">Project Name <span class="text-red-500">*</span></label>
+                    <input type="text" name="name" required placeholder="e.g., HRIS Portal / E-Commerce System" 
+                           class="w-full px-3.5 py-2 rounded-xl border border-slate-300 focus:outline-none focus:border-blue-500 text-sm font-medium">
+                </div>
+                <div>
+                    <label class="block text-xs font-semibold text-slate-600 uppercase mb-1">Description (Optional)</label>
+                    <textarea name="description" rows="3" placeholder="Brief explanation of project scope..." 
+                              class="w-full px-3.5 py-2 rounded-xl border border-slate-300 focus:outline-none focus:border-blue-500 text-sm font-medium"></textarea>
+                </div>
+                <div class="flex items-center justify-end gap-2 pt-2">
+                    <button type="button" 
+                            onclick="closeProjectModal()" 
+                            class="px-4 py-2 text-xs font-bold text-slate-600 bg-slate-100 hover:bg-slate-200 rounded-xl transition-colors cursor-pointer">
+                        Cancel
+                    </button>
+                    <button type="submit" 
+                            class="px-4 py-2 text-xs font-bold text-white bg-blue-600 hover:bg-blue-700 rounded-xl shadow-md transition-colors cursor-pointer">
+                        Save Project
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Edit Project Modal -->
+    <div id="edit-project-modal" class="hidden fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 backdrop-blur-sm">
+        <div class="bg-white rounded-2xl shadow-xl border border-slate-200 w-full max-w-md p-6 relative">
+            <button type="button" 
+                    onclick="closeEditProjectModal()" 
+                    class="absolute top-4 right-4 text-slate-400 hover:text-slate-600 p-1 transition-colors cursor-pointer">
+                ✕
+            </button>
+
+            <h3 class="text-base font-bold text-slate-900 mb-1 flex items-center gap-2">
+                <span>✏️</span> Edit Project
+            </h3>
+            <p class="text-xs text-slate-500 mb-4">Update the selected project name or description.</p>
+
+            <form id="edit-project-form" action="" method="POST" class="space-y-4">
+                <div>
+                    <label class="block text-xs font-semibold text-slate-600 uppercase mb-1">Project Name <span class="text-red-500">*</span></label>
+                    <input type="text" id="edit-project-name" name="name" required 
+                           class="w-full px-3.5 py-2 rounded-xl border border-slate-300 focus:outline-none focus:border-blue-500 text-sm font-medium">
+                </div>
+                <div>
+                    <label class="block text-xs font-semibold text-slate-600 uppercase mb-1">Description (Optional)</label>
+                    <textarea id="edit-project-description" name="description" rows="3" 
+                              class="w-full px-3.5 py-2 rounded-xl border border-slate-300 focus:outline-none focus:border-blue-500 text-sm font-medium"></textarea>
+                </div>
+                <div class="flex items-center justify-end gap-2 pt-2">
+                    <button type="button" 
+                            onclick="closeEditProjectModal()" 
+                            class="px-4 py-2 text-xs font-bold text-slate-600 bg-slate-100 hover:bg-slate-200 rounded-xl transition-colors cursor-pointer">
+                        Cancel
+                    </button>
+                    <button type="submit" 
+                            class="px-4 py-2 text-xs font-bold text-white bg-blue-600 hover:bg-blue-700 rounded-xl shadow-md transition-colors cursor-pointer">
+                        Update Project
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Global HTMX Modal Pop-up Container -->
+    <div id="modal-container"></div>
+
+</body>
+<script>
+    function toggleProjectDropdown() {
+        const menu = document.getElementById('project-dropdown-menu');
+        const isHidden = menu.classList.toggle('hidden');
+        if (!isHidden) {
+            const input = document.getElementById('project-search-input');
+            input.value = '';
+            filterProjectList('');
+            input.focus();
+        }
+    }
+
+    function filterProjectList(keyword) {
+        const term = keyword.toLowerCase();
+        const items = document.querySelectorAll('.project-item');
+        items.forEach(item => {
+            const name = item.getAttribute('data-name') || '';
+            if (name.includes(term) || item.textContent.includes('All Projects')) {
+                item.style.display = 'block';
+            } else {
+                item.style.display = 'none';
+            }
+        });
+    }
+
+    // Close when clicking outside
+    document.addEventListener('click', function(e) {
+        const wrapper = document.getElementById('project-dropdown-wrapper');
+        if (wrapper && !wrapper.contains(e.target)) {
+            document.getElementById('project-dropdown-menu')?.classList.add('hidden');
+        }
+    });
+
+    // 🟢 Kunci presisi posisi scroll layar utama (Window Scroll Lock)
+    (function() {
+        let savedScrollY = 0;
+
+        // Tangkap koordinat scroll layar sebelum request & swap terjadi
+        document.addEventListener('htmx:beforeRequest', function() {
+            savedScrollY = window.scrollY || document.documentElement.scrollTop;
+        });
+
+        document.addEventListener('htmx:beforeSwap', function() {
+            savedScrollY = window.scrollY || document.documentElement.scrollTop;
+        });
+
+        // Kembalikan posisi scroll layar tepat setelah elemen selesai settle
+        document.addEventListener('htmx:afterSettle', function() {
+            window.scrollTo({ top: savedScrollY, behavior: 'instant' });
+            
+            // Frame pengaman untuk membatalkan lompatan auto-focus browser
+            requestAnimationFrame(function() {
+                window.scrollTo({ top: savedScrollY, behavior: 'instant' });
+            });
+        });
+    })();
+</script>
+</html>

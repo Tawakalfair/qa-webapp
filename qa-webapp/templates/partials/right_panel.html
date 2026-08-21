@@ -1,0 +1,396 @@
+<div class="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden min-h-[calc(100vh-170px)] flex flex-col">
+    
+    <!-- 1. Scenario Header Section -->
+    <div class="p-6 border-b border-slate-200 bg-slate-50/50">
+        <div class="flex items-start justify-between gap-4">
+            <div class="space-y-1">
+                <div class="flex items-center gap-2 flex-wrap">
+                    <!-- Project Badge -->
+                    <span class="px-2.5 py-1 rounded-lg text-xs font-bold bg-slate-200 text-slate-700">
+                        📁 {{ case.project.name if case.project else 'Default Project' }}
+                    </span>
+                    <!-- Test Type Badge -->
+                    <span class="px-2.5 py-1 rounded-lg text-xs font-bold 
+                        {% if case.test_type == 'REGRESSION' %}bg-emerald-100 text-emerald-800 border border-emerald-300
+                        {% elif case.test_type == 'CHANGE_REQUEST' %}bg-blue-100 text-blue-800 border border-blue-300
+                        {% elif case.test_type == 'NEW_FEATURE' %}bg-purple-100 text-purple-800 border border-purple-300
+                        {% elif case.test_type == 'HOTFIX' %}bg-rose-100 text-rose-800 border border-rose-300
+                        {% else %}bg-slate-100 text-slate-800 border border-slate-300{% endif %}">
+                        {{ case.test_type }}
+                    </span>
+                    {% if case.reference_number %}
+                        <span class="px-2 py-0.5 rounded text-[11px] font-mono bg-slate-100 text-slate-600 border border-slate-200">
+                            Ref: {{ case.reference_number }}
+                        </span>
+                    {% endif %}
+                </div>
+                <h2 class="text-xl font-bold text-slate-900 pt-1">{{ case.name }}</h2>
+                {% if case.base_url %}
+                    <p class="text-xs font-mono text-slate-500 break-all">
+                        🔗 Base URL: <a href="{{ case.base_url }}" target="_blank" class="hover:underline text-blue-600">{{ case.base_url }}</a>
+                    </p>
+                {% else %}
+                    <p class="text-xs font-mono text-slate-400 italic">🔗 Base URL: Not configured</p>
+                {% endif %}
+            </div>
+
+            <!-- Header Action Buttons -->
+            <div class="flex items-center gap-2 flex-shrink-0">
+                <button type="button" 
+                        hx-get="/testcase/{{ case.id }}/edit-modal"
+                        hx-target="#modal-container"
+                        class="px-3 py-1.5 text-xs font-bold text-slate-700 bg-white hover:bg-slate-100 border border-slate-300 rounded-xl transition-colors cursor-pointer shadow-xs flex items-center gap-1">
+                    ✏️ Edit
+                </button>
+                <button type="button" 
+                        hx-get="/testcase/{{ case.id }}/copy-modal"
+                        hx-target="#modal-container"
+                        class="px-3 py-1.5 text-xs font-bold text-slate-700 bg-white hover:bg-slate-100 border border-slate-300 rounded-xl transition-colors cursor-pointer shadow-xs flex items-center gap-1">
+                    📄 Duplicate
+                </button>
+                <form action="/testcase/{{ case.id }}/delete" method="POST" onsubmit="return confirm('Are you sure you want to delete scenario \'{{ case.name|e }}\'?')">
+                    <button type="submit" 
+                            class="px-3 py-1.5 text-xs font-bold text-rose-600 bg-white hover:bg-rose-50 border border-rose-200 rounded-xl transition-colors cursor-pointer shadow-xs flex items-center gap-1">
+                        🗑️ Delete
+                    </button>
+                </form>
+            </div>
+        </div>
+
+        <!-- 2. Interactive Navigation Tabs Bar -->
+        <div class="flex items-center gap-2 mt-6 border-b border-slate-200 -mb-6">
+            <button type="button" 
+                    id="tab-btn-steps" 
+                    onclick="switchWorkspaceTab('steps')" 
+                    class="px-4 py-2.5 text-xs font-bold border-b-2 border-blue-600 text-blue-600 transition-all cursor-pointer flex items-center gap-1.5">
+                <span>⚡</span> Test Steps ({{ case.steps|length if case.steps else 0 }})
+            </button>
+            <button type="button" 
+                    id="tab-btn-metadata" 
+                    onclick="switchWorkspaceTab('metadata')" 
+                    class="px-4 py-2.5 text-xs font-bold border-b-2 border-transparent text-slate-500 hover:text-slate-800 transition-all cursor-pointer flex items-center gap-1.5">
+                <span>📋</span> UT Document Metadata
+            </button>
+            <button type="button" 
+                    id="tab-btn-execution" 
+                    onclick="switchWorkspaceTab('execution')" 
+                    class="px-4 py-2.5 text-xs font-bold border-b-2 border-transparent text-slate-500 hover:text-slate-800 transition-all cursor-pointer flex items-center gap-1.5">
+                <span>📽️</span> Test Execution & Runner
+            </button>
+        </div>
+    </div>
+
+    <!-- 3. Tab Contents Area -->
+    <div class="p-6 flex-1 flex flex-col">
+        
+        <!-- TAB 1: TEST STEPS EDITOR -->
+        <div id="tab-content-steps" class="space-y-6">
+            
+            <!-- Add Step Form Card -->
+            <div class="p-4 bg-slate-50 border border-slate-200 rounded-xl">
+                <h3 class="text-xs font-bold uppercase tracking-wider text-slate-700 mb-3 flex items-center gap-1.5">
+                    <span>➕</span> Add Instruction Step
+                </h3>
+                
+                <form hx-post="/testcase/{{ case.id }}/step"
+                      hx-target="#step-list-container"
+                      hx-swap="innerHTML show:none"
+                      hx-on::after-request="handleStepFormReset(this, event)"
+                      class="grid grid-cols-1 md:grid-cols-12 gap-3 items-end">
+                    
+                    <!-- 🟢 Position / Order Selection -->
+                    <div class="md:col-span-2">
+                        <label class="block text-[10px] font-bold text-slate-500 uppercase mb-1">Position / #</label>
+                        <select name="target_step_order" 
+                                class="w-full px-3 py-2 bg-white border border-slate-300 rounded-xl text-xs font-semibold text-slate-700 focus:outline-none focus:border-blue-500">
+                            <option value="">End (#{{ (case.steps|length if case.steps else 0) + 1 }})</option>
+                            {% if case.steps %}
+                                {% for step in case.steps|sort(attribute='step_order') %}
+                                    <option value="{{ step.step_order }}">#{{ step.step_order }} (Insert)</option>
+                                {% endfor %}
+                            {% endif %}
+                        </select>
+                    </div>
+
+                    <!-- Command Selection Dropdown -->
+                    <div class="md:col-span-3">
+                        <label class="block text-[10px] font-bold text-slate-500 uppercase mb-1">Command Instruction</label>
+                        <select name="command" 
+                                required 
+                                onchange="toggleCommandInputs(this.value)" 
+                                class="w-full px-3 py-2 bg-white border border-slate-300 rounded-xl text-xs font-semibold text-slate-700 focus:outline-none focus:border-blue-500">
+                            {% for cmd in commands %}
+                            <option value="{{ cmd.code }}">{{ cmd.code }} - {{ cmd.label }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+
+                    <!-- Target Selector Input -->
+                    <div class="md:col-span-3" id="target-selector-wrapper">
+                        <label class="block text-[10px] font-bold text-slate-500 uppercase mb-1">Target Selector (CSS / XPath / Text)</label>
+                        <input type="text" 
+                               name="target_selector" 
+                               placeholder="e.g., #username or text='Submit'" 
+                               class="w-full px-3 py-2 bg-white border border-slate-300 rounded-xl text-xs font-mono focus:outline-none focus:border-blue-500">
+                    </div>
+
+                    <!-- Input Value Text (For Standard Commands) -->
+                    <div class="md:col-span-3" id="input-value-text-wrapper">
+                        <label class="block text-[10px] font-bold text-slate-500 uppercase mb-1">Value / Text / Delay</label>
+                        <input type="text" 
+                               id="input-value-text"
+                               name="input_value" 
+                               placeholder="e.g., admin123 or 3" 
+                               class="w-full px-3 py-2 bg-white border border-slate-300 rounded-xl text-xs font-mono focus:outline-none focus:border-blue-500">
+                    </div>
+
+                    <!-- Target Sub-Scenario Live Search (For INCLUDE_SCENARIO Command) -->
+                    <div class="md:col-span-3 hidden relative" id="input-value-select-wrapper">
+                        <label class="block text-[10px] font-bold text-slate-500 uppercase mb-1">Target Sub-Scenario</label>
+                        
+                        <!-- Hidden input storing target scenario ID -->
+                        <input type="hidden" id="selected-scenario-id" name="input_value_select" disabled>
+                        
+                        <!-- Live Search Input -->
+                        <input type="text" 
+                               id="scenario-search-input"
+                               name="q" 
+                               placeholder="🔍 Type min 2 chars..." 
+                               hx-get="/testcases/search?current_case_id={{ case.id }}" 
+                               hx-trigger="keyup delay:300ms" 
+                               hx-target="#scenario-search-results" 
+                               hx-swap="innerHTML"
+                               hx-on::before-request="if (this.value.includes('📁')) { event.preventDefault(); return false; } document.getElementById('scenario-search-results').style.display = 'block';"
+                               autocomplete="off"
+                               disabled
+                               onclick="if(this.value.includes('📁')) { this.value=''; document.getElementById('selected-scenario-id').value=''; }"
+                               class="w-full px-3 py-2 bg-white border border-slate-300 rounded-xl text-xs font-semibold focus:outline-none focus:border-blue-500">
+                        
+                        <!-- Live Search Dropdown Container -->
+                        <div id="scenario-search-results" class="absolute left-0 top-full mt-1 w-80 md:w-[320px] z-[100]" style="display: none;"></div>
+                    </div>
+
+                    <!-- Submit Button -->
+                    <div class="md:col-span-1">
+                        <button type="submit" class="w-full py-2 px-3 bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs rounded-xl shadow-md transition-colors cursor-pointer">
+                            + Add
+                        </button>
+                    </div>
+                </form>
+            </div>
+
+            <!-- Steps Table Container -->
+            <div class="space-y-3">
+                <div class="flex items-center justify-between">
+                    <h3 class="font-bold text-xs uppercase tracking-wider text-slate-700 flex items-center gap-1.5">
+                        <span>📋</span> Scenario Step Sequence
+                    </h3>
+                    <button type="button" 
+                            hx-get="/testcase/{{ case.id }}/import-modal"
+                            hx-target="#modal-container"
+                            class="bg-indigo-50 hover:bg-indigo-100 text-indigo-700 font-bold text-xs px-3 py-1.5 rounded-xl border border-indigo-200 transition-colors flex items-center gap-1.5 cursor-pointer shadow-xs">
+                        <span>📥</span> Import Steps
+                    </button>
+                </div>
+
+                <div id="step-list-container" class="border border-slate-200 rounded-xl bg-slate-50/50 shadow-inner">
+                    {% include 'partials/step_list.html' %}
+                </div>
+            </div>
+        </div>
+
+        <!-- TAB 2: UT DOCUMENT METADATA FORM -->
+        <div id="tab-content-metadata" class="hidden space-y-4">
+            <div class="p-4 bg-slate-50 border border-slate-200 rounded-xl mb-4">
+                <h3 class="text-xs font-bold uppercase tracking-wider text-slate-700 mb-1">📋 UT Document Matrix Attributes</h3>
+                <p class="text-xs text-slate-500">Configure parameters used when exporting the Excel Unit Test Document.</p>
+            </div>
+
+            <form hx-post="/testcase/{{ case.id }}/edit-ut-metadata"
+                  hx-target="#right-panel"
+                  hx-swap="innerHTML"
+                  class="space-y-4">
+                
+                <div class="grid grid-cols-2 gap-4">
+                    <div>
+                        <label class="block text-xs font-bold text-slate-600 uppercase mb-1">Theme</label>
+                        <input type="text" name="ut_theme" value="{{ case.ut_theme or '' }}" placeholder="Auto: Project Name" class="w-full px-3 py-2 border border-slate-300 rounded-xl text-xs font-medium">
+                    </div>
+                    <div>
+                        <label class="block text-xs font-bold text-slate-600 uppercase mb-1">Function Name</label>
+                        <input type="text" name="ut_function_name" value="{{ case.ut_function_name or '' }}" placeholder="Auto: Scenario Name" class="w-full px-3 py-2 border border-slate-300 rounded-xl text-xs font-medium">
+                    </div>
+                </div>
+
+                <div class="grid grid-cols-2 gap-4">
+                    <div>
+                        <label class="block text-xs font-bold text-slate-600 uppercase mb-1">Classification</label>
+                        <select name="ut_classification" class="w-full px-3 py-2 border border-slate-300 rounded-xl text-xs font-semibold text-slate-700 bg-white">
+                            <option value="" {% if not case.ut_classification %}selected{% endif %}>Auto: Normal</option>
+                            <option value="Normal" {% if case.ut_classification == 'Normal' %}selected{% endif %}>Normal</option>
+                            <option value="Abnormal (Error Handling)" {% if case.ut_classification == 'Abnormal (Error Handling)' %}selected{% endif %}>Abnormal (Error Handling)</option>
+                            <option value="Boundary Condition" {% if case.ut_classification == 'Boundary Condition' %}selected{% endif %}>Boundary Condition</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label class="block text-xs font-bold text-slate-600 uppercase mb-1">Condition 1</label>
+                        <input type="text" name="ut_condition_1" value="{{ case.ut_condition_1 or '' }}" placeholder="Auto: Base URL" class="w-full px-3 py-2 border border-slate-300 rounded-xl text-xs font-medium">
+                    </div>
+                </div>
+
+                <div>
+                    <label class="block text-xs font-bold text-slate-600 uppercase mb-1">Condition 2</label>
+                    <input type="text" name="ut_condition_2" value="{{ case.ut_condition_2 or '' }}" placeholder="Auto: '-'" class="w-full px-3 py-2 border border-slate-300 rounded-xl text-xs font-medium">
+                </div>
+
+                <div>
+                    <label class="block text-xs font-bold text-slate-600 uppercase mb-1">Action Description</label>
+                    <textarea name="ut_action" rows="2" placeholder="Auto: Step #1 Description" class="w-full px-3 py-2 border border-slate-300 rounded-xl text-xs font-medium">{{ case.ut_action or '' }}</textarea>
+                </div>
+
+                <div>
+                    <label class="block text-xs font-bold text-slate-600 uppercase mb-1">How to Test Procedure</label>
+                    <textarea name="ut_how_to_test" rows="3" placeholder="Auto: Compilation of all TestSteps" class="w-full px-3 py-2 border border-slate-300 rounded-xl text-xs font-medium">{{ case.ut_how_to_test or '' }}</textarea>
+                </div>
+
+                <div>
+                    <label class="block text-xs font-bold text-slate-600 uppercase mb-1">Expected Results</label>
+                    <textarea name="ut_expected_results" rows="3" placeholder="Auto: Compilation of VERIFY steps" class="w-full px-3 py-2 border border-slate-300 rounded-xl text-xs font-medium">{{ case.ut_expected_results or '' }}</textarea>
+                </div>
+
+                <div class="flex justify-end pt-2">
+                    <button type="submit" class="px-5 py-2.5 bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs rounded-xl shadow-md transition-colors cursor-pointer">
+                        Save UT Metadata
+                    </button>
+                </div>
+            </form>
+        </div>
+
+        <!-- TAB 3: TEST EXECUTION & VIDEO RUNNER -->
+        <div id="tab-content-execution" class="hidden space-y-4">
+            
+            <!-- Execution Control Header Card -->
+            <div class="p-4 bg-slate-50 border border-slate-200 rounded-2xl shadow-xs">
+                <form hx-post="/testcase/{{ case.id }}/run" 
+                      hx-target="#run-status-container" 
+                      hx-swap="innerHTML"
+                      hx-indicator="#loading-spinner"
+                      hx-disabled-elt="find button"
+                      class="flex flex-wrap items-center justify-between gap-4">
+                    
+                    <div>
+                        <h3 class="text-xs font-bold uppercase tracking-wider text-slate-700 flex items-center gap-1.5">
+                            <span>🚀</span> TEST EXECUTION CONTROL
+                        </h3>
+                        <p class="text-[11px] text-slate-500 mt-0.5">Run Playwright automation engine and inspect real-time execution.</p>
+                    </div>
+
+                    <div class="flex items-center gap-3">
+                        <label class="flex items-center gap-1.5 text-xs text-slate-600 font-semibold cursor-pointer">
+                            <input type="checkbox" name="record_video" class="rounded border-slate-300 text-blue-600 focus:ring-blue-500" checked>
+                            <span>🎥 Record Video</span>
+                        </label>
+                        
+                        <button type="submit" class="bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs px-4 py-2 rounded-xl transition-all flex items-center gap-1.5 cursor-pointer shadow-sm">
+                            <span>▶</span> Run Test
+                        </button>
+                    </div>
+                </form>
+            </div>
+
+            <!-- Static Loading Indicator -->
+            <div id="loading-spinner" class="htmx-indicator">
+                <div class="p-4 rounded-xl border border-blue-200 bg-blue-50 text-blue-800 flex items-center gap-3">
+                    <span class="text-base">⏳</span>
+                    <div>
+                        <p class="text-xs font-bold">Executing Playwright scenario...</p>
+                        <p class="text-[11px] text-blue-600 mt-0.5">Please wait until all browser automation steps finish.</p>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Execution Status & Video Container -->
+            <div id="run-status-container">
+                {% set run = case.runs | sort(attribute='id', reverse=True) | first if case.runs else None %}
+                {% if run %}
+                    {% include "partials/status.html" %}
+                {% else %}
+                    <div class="p-8 border border-slate-200 rounded-2xl text-center text-slate-400 bg-slate-50/50">
+                        <p class="text-xs font-semibold">No execution history found. Click "▶ Run Test" above to start testing.</p>
+                    </div>
+                {% endif %}
+            </div>
+
+        </div>
+
+    </div>
+</div>
+
+<!-- Indicator Display Fallback Styles -->
+<style>
+    .htmx-indicator {
+        display: none !important;
+    }
+    .htmx-request .htmx-indicator,
+    .htmx-request.htmx-indicator {
+        display: block !important;
+    }
+</style>
+
+<!-- Tab Navigation & Dynamic Input Controller Scripts -->
+<script>
+    function switchWorkspaceTab(tabName) {
+        const tabs = ['steps', 'metadata', 'execution'];
+        tabs.forEach(t => {
+            const btn = document.getElementById(`tab-btn-${t}`);
+            const content = document.getElementById(`tab-content-${t}`);
+            
+            if (t === tabName) {
+                btn.className = "px-4 py-2.5 text-xs font-bold border-b-2 border-blue-600 text-blue-600 transition-all cursor-pointer flex items-center gap-1.5";
+                content.classList.remove('hidden');
+            } else {
+                btn.className = "px-4 py-2.5 text-xs font-bold border-b-2 border-transparent text-slate-500 hover:text-slate-800 transition-all cursor-pointer flex items-center gap-1.5";
+                content.classList.add('hidden');
+            }
+        });
+    }
+
+    function toggleCommandInputs(commandValue) {
+        const textWrapper = document.getElementById('input-value-text-wrapper');
+        const selectWrapper = document.getElementById('input-value-select-wrapper');
+        const textInput = document.getElementById('input-value-text');
+        const hiddenSelectInput = document.getElementById('selected-scenario-id');
+        const searchInput = document.getElementById('scenario-search-input');
+
+        if (commandValue === 'INCLUDE_SCENARIO') {
+            textWrapper.classList.add('hidden');
+            selectWrapper.classList.remove('hidden');
+            
+            if (textInput) textInput.disabled = true;
+            if (hiddenSelectInput) hiddenSelectInput.disabled = false;
+            if (searchInput) searchInput.disabled = false;
+        } else {
+            textWrapper.classList.remove('hidden');
+            selectWrapper.classList.add('hidden');
+            
+            if (textInput) textInput.disabled = false;
+            if (hiddenSelectInput) hiddenSelectInput.disabled = true;
+            if (searchInput) searchInput.disabled = true;
+        }
+    }
+
+    function handleScenarioSelect(event, el) {
+        event.preventDefault();
+        const id = el.getAttribute('data-id');
+        const name = el.getAttribute('data-name');
+        const project = el.getAttribute('data-project');
+
+        const hiddenInput = document.getElementById('selected-scenario-id');
+        const searchInput = document.getElementById('scenario-search-input');
+        const resultsDiv = document.getElementById('scenario-search-results');
+
+        if (hiddenInput) hiddenInput.value = id;
+        if (searchInput) searchInput.value = `📁 [${project}] ${name}`;
+        if (resultsDiv) resultsDiv.style.display = 'none';
+    }
+</script>

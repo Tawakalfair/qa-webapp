@@ -20,14 +20,15 @@ function showToast(message, type = 'success') {
         icon = '❌';
     }
 
-    toast.className = `flex items-center gap-3 ${bgColor} text-white text-xs font-bold px-4 py-3 rounded-xl shadow-xl transition-all duration-300 border animate-bounce`;
+    // 🟢 HAPUS: transition-all, duration-300, dan animate-bounce
+    toast.className = `flex items-center gap-3 ${bgColor} text-white text-xs font-bold px-4 py-3 rounded-xl shadow-xl border`;
     toast.innerHTML = `<span class="text-base">${icon}</span> <span>${message}</span>`;
     
     container.appendChild(toast);
 
+    // 🟢 HAPUS: animasi fade-out (opacity-0, translate-y-2). Langsung remove() saja.
     setTimeout(() => {
-        toast.classList.add('opacity-0', 'translate-y-2');
-        setTimeout(() => toast.remove(), 300);
+        toast.remove();
     }, 4000);
 }
 
@@ -270,5 +271,68 @@ function toggleStepInputs(commandSelect) {
         if (searchInput) {
             searchInput.disabled = true;
         }
+    }
+}
+
+/**
+ * Resets all text inputs after adding a step while preserving the selected command dropdown value.
+ * @param {HTMLFormElement} form - The submitted form element.
+ * @param {CustomEvent} event - The HTMX after-request event.
+ */
+function handleStepFormReset(form, event) {
+    if (event.detail && event.detail.successful) {
+        const cmdSelect = form.querySelector('select[name="command"]');
+        const currentCmd = cmdSelect ? cmdSelect.value : '';
+
+        // Clear all text inputs
+        form.querySelectorAll('input[type="text"]').forEach(input => input.value = '');
+
+        // Clear hidden scenario search ID
+        const hiddenId = document.getElementById('selected-scenario-id');
+        if (hiddenId) hiddenId.value = '';
+
+        // Retain the active command selection
+        if (cmdSelect && currentCmd) {
+            cmdSelect.value = currentCmd;
+        }
+    }
+}
+
+/**
+ * Toggles all step selection checkboxes.
+ * @param {HTMLInputElement} masterCheckbox
+ */
+function toggleSelectAllSteps(masterCheckbox) {
+    const checkboxes = document.querySelectorAll('.step-checkbox');
+    checkboxes.forEach(cb => cb.checked = masterCheckbox.checked);
+    updateStepBulkActionState();
+}
+
+/**
+ * Updates the state and counter of the batch delete toolbar.
+ */
+function updateStepBulkActionState() {
+    const checkedBoxes = document.querySelectorAll('.step-checkbox:checked');
+    const allBoxes = document.querySelectorAll('.step-checkbox');
+    const toolbar = document.getElementById('step-bulk-toolbar');
+    const countLabel = document.getElementById('step-selected-count');
+    const masterCheckbox = document.getElementById('select-all-steps');
+
+    if (countLabel) {
+        countLabel.textContent = `${checkedBoxes.length} step(s) selected`;
+    }
+
+    if (toolbar) {
+        if (checkedBoxes.length > 0) {
+            toolbar.classList.remove('hidden');
+            toolbar.classList.add('flex');
+        } else {
+            toolbar.classList.add('hidden');
+            toolbar.classList.remove('flex');
+        }
+    }
+
+    if (masterCheckbox && allBoxes.length > 0) {
+        masterCheckbox.checked = checkedBoxes.length === allBoxes.length;
     }
 }

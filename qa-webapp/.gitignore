@@ -1,0 +1,15 @@
+.venv/
+venv/
+ENV/
+pycache/
+*.py[cod]
+*.db
+qa_database.db
+static/videos/.webm
+static/videos/.mp4
+!static/videos/.gitkeep
+.DS_Store
+.vscode/
+.idea/
+static/screenshots/*.png
+!static/screenshots/.gitkeep

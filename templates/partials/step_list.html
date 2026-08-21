@@ -1,109 +1,142 @@
 <div id="step-list-container" class="overflow-x-auto">
+    
+    <!-- Bulk Delete Steps Action Toolbar -->
+    <div id="step-bulk-toolbar" class="hidden items-center justify-between bg-rose-50 border border-rose-200 px-3.5 py-2 rounded-xl mb-3">
+        <div class="flex items-center gap-2">
+            <span class="text-xs font-bold text-rose-800" id="step-selected-count">0 step(s) selected</span>
+        </div>
+        <button type="button"
+                hx-post="/testcase/{{ case.id }}/steps/bulk-delete"
+                hx-target="#step-list-container"
+                hx-swap="innerHTML show:none"
+                hx-include="input[name='step_ids']:checked"
+                hx-confirm="Are you sure you want to delete all selected steps?"
+                class="px-3 py-1 bg-rose-600 hover:bg-rose-700 text-white font-bold text-xs rounded-lg shadow-sm transition-colors flex items-center gap-1.5 cursor-pointer">
+            <span>🗑️</span> Delete Selected
+        </button>
+    </div>
+
+    <!-- Step Sequence Table -->
     <table class="w-full text-left border-collapse">
-    <thead>
-        <tr class="border-b border-slate-200 bg-slate-50/80 text-[11px] font-extrabold text-slate-700 uppercase tracking-wider">
-            <th class="py-3 px-4 w-12 text-center">#</th>
-            <th class="py-3 px-4">Perintah</th>
-            <th class="py-3 px-4">Target Selector</th>
-            <th class="py-3 px-4">Nilai / Value</th>
-            <th class="py-3 px-4 text-center w-28">Aksi</th>
-        </tr>
-    </thead>
-    <tbody class="divide-y divide-slate-100 text-xs">
-        {% if case and case.steps %}
-            {% for step in case.steps|sort(attribute='step_order') %}
-            <tr class="hover:bg-slate-50/80 transition-colors group">
-                <!-- Nomor Urut -->
-                <td class="py-3 px-4 font-bold text-slate-500 text-center">{{ step.step_order }}</td>
-
-                <!-- Badge Perintah (Warna Lebih Terang & Kontras) -->
-                <td class="py-3 px-4 font-semibold">
-                    <span class="inline-block px-2.5 py-1 rounded-md text-[11px] font-mono font-bold border shadow-xs
-                    {% if step.command == 'GOTO_URL' %}bg-purple-100 text-purple-900 border-purple-300
-                    {% elif step.command == 'CLICK' %}bg-blue-100 text-blue-900 border-blue-300
-                    {% elif step.command == 'TYPE_TEXT' %}bg-emerald-100 text-emerald-900 border-emerald-300
-                    {% elif 'WAIT' in step.command %}bg-amber-100 text-amber-900 border-amber-300
-                    {% elif 'SELECT' in step.command %}bg-teal-100 text-teal-900 border-teal-300
-                    {% elif 'ASSERT' in step.command or 'VERIFY' in step.command %}bg-rose-100 text-rose-900 border-rose-300
-                    {% elif step.command == 'INCLUDE_SCENARIO' %}bg-indigo-100 text-indigo-900 border-indigo-300
-                    {% elif 'SCROLL' in step.command %}bg-cyan-100 text-cyan-900 border-cyan-300
-                    {% else %}bg-slate-200 text-slate-900 border-slate-300{% endif %}">
-                        {{ step.command }}
-                    </span>
-                </td>
-
-                <!-- Target Selector -->
-                <td class="py-3 px-4 font-mono font-semibold text-slate-800 break-all">
-                    {{ step.target_selector or '-' }}
-                </td>
-
-                <!-- Nilai Input / Value -->
-                <td class="py-3 px-4 font-mono font-semibold text-slate-800 break-all">
-                    {{ step.input_value or '-' }}
-                </td>
-
-                <!-- Tombol Aksi -->
-                <td class="py-3 px-4 text-center">
-                    <div class="flex items-center justify-center gap-1">
-                        <!-- Tombol Pindahkan ke Atas -->
-                        {% if not loop.first %}
-                        <button type="button" 
-                                hx-post="/testcase/{{ case.id }}/step/{{ step.id }}/move/up"
-                                hx-target="#step-list-container"
-                                hx-swap="outerHTML"
-                                title="Pindahkan ke Atas"
-                                class="p-1 text-slate-500 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors cursor-pointer">
-                            ⬆️
-                        </button>
-                        {% else %}
-                        <span class="w-6"></span>
-                        {% endif %}
-
-                        <!-- Tombol Pindahkan ke Bawah -->
-                        {% if not loop.last %}
-                        <button type="button" 
-                                hx-post="/testcase/{{ case.id }}/step/{{ step.id }}/move/down"
-                                hx-target="#step-list-container"
-                                hx-swap="outerHTML"
-                                title="Pindahkan ke Bawah"
-                                class="p-1 text-slate-500 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors cursor-pointer">
-                            ⬇️
-                        </button>
-                        {% else %}
-                        <span class="w-6"></span>
-                        {% endif %}
-
-                        <!-- Tombol Edit Step Inline -->
-                        <button type="button" 
-                                hx-get="/testcase/{{ case.id }}/step/{{ step.id }}/edit"
-                                hx-target="closest tr"
-                                hx-swap="outerHTML"
-                                title="Edit Langkah"
-                                class="p-1 text-amber-600 hover:text-amber-700 hover:bg-amber-50 rounded-lg transition-colors cursor-pointer">
-                            ✏️
-                        </button>
-
-                        <!-- Tombol Hapus Step -->
-                        <button type="button" 
-                                hx-delete="/testcase/{{ case.id }}/step/{{ step.id }}"
-                                hx-target="#step-list-container"
-                                hx-swap="outerHTML"
-                                hx-confirm="Apakah Anda yakin ingin menghapus langkah ini?"
-                                title="Hapus Langkah"
-                                class="p-1 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors cursor-pointer">
-                            🗑️
-                        </button>
-                    </div>
-                </td>
+        <thead>
+            <tr class="border-b border-slate-200 bg-slate-50/80 text-[11px] font-extrabold text-slate-700 uppercase tracking-wider">
+                <th class="py-3 px-3 w-10 text-center">
+                    <input type="checkbox" 
+                           id="select-all-steps" 
+                           onchange="toggleSelectAllSteps(this)" 
+                           class="w-4 h-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500 cursor-pointer">
+                </th>
+                <th class="py-3 px-2 w-10 text-center">#</th>
+                <th class="py-3 px-4">Command</th>
+                <th class="py-3 px-4">Target Selector</th>
+                <th class="py-3 px-4">Input Value</th>
+                <th class="py-3 px-4 text-center w-28">Actions</th>
             </tr>
-            {% endfor %}
-        {% else %}
-            <tr>
-                <td colspan="5" class="py-8 text-center text-slate-400 italic">
-                    Belum ada langkah pengujian. Silakan tambahkan langkah di atas.
-                </td>
-            </tr>
-        {% endif %}
-    </tbody>
-</table>
+        </thead>
+        <tbody class="divide-y divide-slate-100 text-xs">
+            {% if case and case.steps %}
+                {% for step in case.steps|sort(attribute='step_order') %}
+                <tr class="hover:bg-slate-50/80 transition-colors group">
+                    <!-- Selection Checkbox -->
+                    <td class="py-3 px-3 text-center">
+                        <input type="checkbox" 
+                               name="step_ids" 
+                               value="{{ step.id }}" 
+                               onchange="updateStepBulkActionState()" 
+                               class="step-checkbox w-4 h-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500 cursor-pointer">
+                    </td>
+
+                    <!-- Step Order Number -->
+                    <td class="py-3 px-2 font-bold text-slate-500 text-center">{{ step.step_order }}</td>
+
+                    <!-- Command Badge -->
+                    <td class="py-3 px-4 font-semibold">
+                        <span class="inline-block px-2.5 py-1 rounded-md text-[11px] font-mono font-bold border shadow-xs
+                        {% if step.command == 'GOTO_URL' %}bg-purple-100 text-purple-900 border-purple-300
+                        {% elif step.command == 'CLICK' %}bg-blue-100 text-blue-900 border-blue-300
+                        {% elif step.command == 'TYPE_TEXT' %}bg-emerald-100 text-emerald-900 border-emerald-300
+                        {% elif 'WAIT' in step.command %}bg-amber-100 text-amber-900 border-amber-300
+                        {% elif 'SELECT' in step.command %}bg-teal-100 text-teal-900 border-teal-300
+                        {% elif 'ASSERT' in step.command or 'VERIFY' in step.command %}bg-rose-100 text-rose-900 border-rose-300
+                        {% elif step.command == 'INCLUDE_SCENARIO' %}bg-indigo-100 text-indigo-900 border-indigo-300
+                        {% elif 'SCROLL' in step.command %}bg-cyan-100 text-cyan-900 border-cyan-300
+                        {% else %}bg-slate-200 text-slate-900 border-slate-300{% endif %}">
+                            {{ step.command }}
+                        </span>
+                    </td>
+
+                    <!-- Target Selector -->
+                    <td class="py-3 px-4 font-mono font-semibold text-slate-800 break-all">
+                        {{ step.target_selector or '-' }}
+                    </td>
+
+                    <!-- Input Value -->
+                    <td class="py-3 px-4 font-mono font-semibold text-slate-800 break-all">
+                        {{ step.input_value or '-' }}
+                    </td>
+
+                    <!-- Action Buttons -->
+                    <td class="py-3 px-4 text-center">
+                        <div class="flex items-center justify-center gap-1">
+                            <!-- Move Up -->
+                            {% if not loop.first %}
+                            <button type="button" 
+                                    hx-post="/testcase/{{ case.id }}/step/{{ step.id }}/move/up"
+                                    hx-target="#step-list-container"
+                                    hx-swap="innerHTML show:none"
+                                    title="Move Up"
+                                    class="p-1 text-slate-500 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors cursor-pointer">
+                                ⬆️
+                            </button>
+                            {% else %}
+                            <span class="w-6"></span>
+                            {% endif %}
+
+                            <!-- Move Down -->
+                            {% if not loop.last %}
+                            <button type="button" 
+                                    hx-post="/testcase/{{ case.id }}/step/{{ step.id }}/move/down"
+                                    hx-target="#step-list-container"
+                                    hx-swap="innerHTML show:none"
+                                    title="Move Down"
+                                    class="p-1 text-slate-500 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors cursor-pointer">
+                                ⬇️
+                            </button>
+                            {% else %}
+                            <span class="w-6"></span>
+                            {% endif %}
+
+                            <!-- Inline Edit Step -->
+                            <button type="button" 
+                                    hx-get="/testcase/{{ case.id }}/step/{{ step.id }}/edit"
+                                    hx-target="closest tr"
+                                    hx-swap="outerHTML show:none"
+                                    title="Edit Step"
+                                    class="p-1 text-amber-600 hover:text-amber-700 hover:bg-amber-50 rounded-lg transition-colors cursor-pointer">
+                                ✏️
+                            </button>
+
+                            <!-- Single Delete Step -->
+                            <button type="button" 
+                                    hx-delete="/testcase/{{ case.id }}/step/{{ step.id }}"
+                                    hx-target="#step-list-container"
+                                    hx-swap="innerHTML show:none"
+                                    hx-confirm="Are you sure you want to delete this step?"
+                                    title="Delete Step"
+                                    class="p-1 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors cursor-pointer">
+                                🗑️
+                            </button>
+                        </div>
+                    </td>
+                </tr>
+                {% endfor %}
+            {% else %}
+                <tr>
+                    <td colspan="6" class="py-8 text-center text-slate-400 italic">
+                        No test steps found. Please add a step using the form above.
+                    </td>
+                </tr>
+            {% endif %}
+        </tbody>
+    </table>
 </div>

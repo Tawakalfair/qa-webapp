@@ -3,7 +3,7 @@ import json
 import uuid
 import os
 import sys
-from typing import Optional
+from typing import List, Optional
 from fastapi import APIRouter, HTTPException, Query, Request, BackgroundTasks, Depends, Form, Response
 from fastapi.templating import Jinja2Templates
 from fastapi.responses import FileResponse, HTMLResponse, RedirectResponse, StreamingResponse
@@ -234,47 +234,96 @@ async def get_batch_progress(
 # ==========================================
 
 @router.get("/")
-async def render_dashboard(
+async def dashboard(
     request: Request,
-    project_id: Optional[str] = None,
-    test_type: Optional[str] = None,
+    project_id: Optional[str] = Query(None),
+    test_type: Optional[str] = Query(None),
+    selected_id: Optional[str] = Query(None),  # 🟢 Read selected_id query param
+    msg: Optional[str] = Query(None),
+    type: Optional[str] = Query("success"),
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
-    parsed_project_id: Optional[int] = None
-    if project_id and project_id.strip().isdigit():
-        parsed_project_id = int(project_id.strip())
+    """Render main workspace dashboard and automatically load selected scenario if selected_id is provided."""
+    parsed_project_id: Optional[int] = int(project_id.strip()) if (project_id and project_id.strip().isdigit()) else None
+    parsed_selected_id: Optional[int] = int(selected_id.strip()) if (selected_id and selected_id.strip().isdigit()) else None
 
+    # Fetch user projects for header filter
     proj_result = await db.execute(
         select(Project).where(Project.user_id == current_user.id).order_by(Project.name.asc())
     )
     projects = proj_result.scalars().all()
 
+    # Query test cases for left sidebar
     query = (
         select(TestCase)
         .join(Project)
         .where(Project.user_id == current_user.id)
-        .options(selectinload(TestCase.project), selectinload(TestCase.runs), selectinload(TestCase.steps))
+        .options(selectinload(TestCase.project), selectinload(TestCase.runs))
         .order_by(TestCase.id.desc())
     )
-    
+
     if parsed_project_id:
         query = query.where(TestCase.project_id == parsed_project_id)
     if test_type and test_type.strip():
         query = query.where(TestCase.test_type == test_type.strip())
 
-    result = await db.execute(query)
-    test_cases = result.scalars().all()
+    cases_result = await db.execute(query)
+    test_cases = cases_result.scalars().all()
 
-    return templates.TemplateResponse("index.html", {
+    # 🟢 If selected_id is provided, eager load that scenario for the right workspace panel
+    selected_case = None
+    commands = []
+    other_cases = []
+
+    if parsed_selected_id:
+        selected_case_query = (
+            select(TestCase)
+            .join(Project)
+            .where(TestCase.id == parsed_selected_id, Project.user_id == current_user.id)
+            .options(
+                selectinload(TestCase.project),
+                selectinload(TestCase.steps),
+                selectinload(TestCase.runs)  # Prevents MissingGreenlet error
+            )
+        )
+        selected_case_res = await db.execute(selected_case_query)
+        selected_case = selected_case_res.scalar_one_or_none()
+
+        if selected_case:
+            # Sync selected_project_id if it wasn't provided in the URL
+            if not parsed_project_id:
+                parsed_project_id = selected_case.project_id
+
+            cmd_result = await db.execute(select(CommandDefinition).order_by(CommandDefinition.code.asc()))
+            commands = cmd_result.scalars().all()
+
+            other_cases_result = await db.execute(
+                select(TestCase)
+                .join(Project)
+                .where(TestCase.id != selected_case.id, Project.user_id == current_user.id)
+                .options(selectinload(TestCase.project))
+                .order_by(TestCase.name.asc())
+            )
+            other_cases = other_cases_result.scalars().all()
+
+    response = templates.TemplateResponse("index.html", {
         "request": request,
-        "title": "QA Automata - Skenario",
+        "title": "QA Automata - Workspace",
         "projects": projects,
         "test_cases": test_cases,
         "selected_project_id": parsed_project_id,
-        "selected_test_type": test_type,
+        "selected_test_type": test_type or "",
+        "selected_case_id": parsed_selected_id,
+        "case": selected_case,  # Passed directly for right_panel.html
+        "commands": commands,
+        "other_cases": other_cases,
         "current_user": current_user
     })
+
+    if msg:
+        return trigger_toast(response, msg, type)
+    return response
 
 
 # ==========================================
@@ -334,20 +383,58 @@ async def delete_project(
         
     return RedirectResponse(url="/", status_code=303)
 
+# ==========================================
+# CREATE SCENARIO MODAL ROUTE
+# ==========================================
+
+@router.get("/testcase/new-modal")
+async def get_create_case_modal(
+    request: Request,
+    project_id: Optional[str] = Query(None), # 🟢 Read active project filter
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """Render modal dialog for creating a new test scenario with active project pre-selected."""
+    parsed_project_id: Optional[int] = int(project_id.strip()) if (project_id and project_id.strip().isdigit()) else None
+
+    proj_result = await db.execute(
+        select(Project).where(Project.user_id == current_user.id).order_by(Project.name.asc())
+    )
+    projects = proj_result.scalars().all()
+    
+    return templates.TemplateResponse("partials/create_case_modal.html", {
+        "request": request,
+        "projects": projects,
+        "selected_project_id": parsed_project_id # 🟢 Pass selected project ID to template
+    })
+
 
 # ==========================================
-# RUTE SKENARIO (TEST CASE & METADATA)
+# FETCH SCENARIO WORKSPACE PANEL
 # ==========================================
 
 @router.get("/testcase/{case_id}")
-async def get_test_case_panel(case_id: int, request: Request, db: AsyncSession = Depends(get_db), current_user: User = Depends(get_current_user)):
-    test_case = await get_user_testcase_or_404(db, case_id, current_user.id, eager_load_steps=True)
+async def get_test_case_panel(
+    case_id: int, 
+    request: Request, 
+    db: AsyncSession = Depends(get_db), 
+    current_user: User = Depends(get_current_user)
+):
+    """Fetch test case details and render the right panel workspace with eager-loaded steps and runs."""
+    # 🟢 Set eager_load_runs=True to prevent MissingGreenlet error in right_panel.html
+    test_case = await get_user_testcase_or_404(
+        db, case_id, current_user.id, eager_load_steps=True, eager_load_runs=True
+    )
     
     cmd_result = await db.execute(select(CommandDefinition).order_by(CommandDefinition.code.asc()))
     commands = cmd_result.scalars().all()
 
     all_cases_result = await db.execute(
-        select(TestCase).join(Project).where(TestCase.id != case_id, Project.user_id == current_user.id).options(selectinload(TestCase.project)).order_by(TestCase.name.asc())
+        select(TestCase)
+        .join(Project)
+        .where(TestCase.id != case_id, Project.user_id == current_user.id)
+        .options(selectinload(TestCase.project))
+        .order_by(TestCase.name.asc())
     )
     other_cases = all_cases_result.scalars().all()
     
@@ -363,7 +450,7 @@ async def get_test_case_panel(case_id: int, request: Request, db: AsyncSession =
 async def create_test_case(
     project_id: str = Form(...),
     name: str = Form(...),
-    base_url: str = Form(...),
+    base_url: Optional[str] = Form(None),  # Made optional
     test_type: str = Form("REGRESSION"),
     reference_number: Optional[str] = Form(None),
     ut_theme: Optional[str] = Form(None),
@@ -377,23 +464,32 @@ async def create_test_case(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
+    """Create a new test scenario with optional base_url and redirect to dashboard."""
     if not project_id or not project_id.strip().isdigit():
-        msg = "Proyek target tidak valid."
+        msg = "Invalid target project."
         return RedirectResponse(url=f"/?msg={msg}&type=error", status_code=303)
 
     parsed_project_id = int(project_id.strip())
 
-    proj_result = await db.execute(select(Project).where(Project.id == parsed_project_id, Project.user_id == current_user.id))
+    proj_result = await db.execute(
+        select(Project).where(Project.id == parsed_project_id, Project.user_id == current_user.id)
+    )
     if not proj_result.scalar_one_or_none():
-        return RedirectResponse(url=f"/?msg=Akses ditolak&type=error", status_code=303)
+        return RedirectResponse(url=f"/?msg=Access denied&type=error", status_code=303)
+
+    # Sanitize base_url
+    clean_base_url = base_url.strip() if (base_url and base_url.strip()) else None
 
     new_case = TestCase(
-        project_id=parsed_project_id, name=name.strip(), base_url=base_url.strip(), test_type=test_type,
+        project_id=parsed_project_id,
+        name=name.strip(),
+        base_url=clean_base_url,
+        test_type=test_type,
         reference_number=reference_number.strip() if (reference_number and reference_number.strip()) else None,
         ut_theme=ut_theme.strip() if (ut_theme and ut_theme.strip()) else None,
         ut_function_name=ut_function_name.strip() if (ut_function_name and ut_function_name.strip()) else None,
         ut_action=ut_action.strip() if (ut_action and ut_action.strip()) else None,
-        ut_condition_1=ut_condition_1.strip() if (ut_condition_1 and ut_condition_1.strip()) else None,
+        ut_condition_1=ut_condition_1.strip() if (ut_condition_1 and ut_condition_1.strip()) else clean_base_url,
         ut_condition_2=ut_condition_2.strip() if (ut_condition_2 and ut_condition_2.strip()) else None,
         ut_classification=ut_classification.strip() if (ut_classification and ut_classification.strip()) else None,
         ut_how_to_test=ut_how_to_test.strip() if (ut_how_to_test and ut_how_to_test.strip()) else None,
@@ -402,9 +498,8 @@ async def create_test_case(
     db.add(new_case)
     await db.commit()
     
-    msg = f"Skenario '{new_case.name}' berhasil ditambahkan!"
-    return RedirectResponse(url=f"/?project_id={parsed_project_id}&msg={msg}&type=success", status_code=303)
-
+    msg = f"Scenario '{new_case.name}' successfully created!"
+    return RedirectResponse(url=f"/?project_id={parsed_project_id}&selected_id={new_case.id}&msg={msg}&type=success", status_code=303)
 
 @router.get("/testcase/{case_id}/edit-modal")
 async def get_edit_case_modal(
@@ -517,7 +612,11 @@ async def update_ut_metadata(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
-    test_case = await get_user_testcase_or_404(db, case_id, current_user.id, eager_load_steps=True)
+    """Update scenario UT Metadata and re-render workspace panel."""
+    # 🟢 Set eager_load_runs=True here as well
+    test_case = await get_user_testcase_or_404(
+        db, case_id, current_user.id, eager_load_steps=True, eager_load_runs=True
+    )
     
     test_case.ut_theme = ut_theme.strip() if (ut_theme and ut_theme.strip()) else None
     test_case.ut_function_name = ut_function_name.strip() if (ut_function_name and ut_function_name.strip()) else None
@@ -533,14 +632,18 @@ async def update_ut_metadata(
     commands = cmd_result.scalars().all()
 
     all_cases_result = await db.execute(
-        select(TestCase).join(Project).where(TestCase.id != case_id, Project.user_id == current_user.id).options(selectinload(TestCase.project)).order_by(TestCase.name.asc())
+        select(TestCase)
+        .join(Project)
+        .where(TestCase.id != case_id, Project.user_id == current_user.id)
+        .options(selectinload(TestCase.project))
+        .order_by(TestCase.name.asc())
     )
     other_cases = all_cases_result.scalars().all()
 
     res = templates.TemplateResponse("partials/right_panel.html", {
         "request": request, "case": test_case, "commands": commands, "other_cases": other_cases
     })
-    return trigger_toast(res, "Metadata UT Document berhasil diperbarui!")
+    return trigger_toast(res, "UT Document metadata updated successfully!")
 
 
 @router.post("/testcase/{case_id}/delete")
@@ -551,6 +654,48 @@ async def delete_test_case(case_id: int, db: AsyncSession = Depends(get_db), cur
     await db.commit()
     msg = f"Skenario '{name}' berhasil dihapus."
     return RedirectResponse(url=f"/?msg={msg}&type=success", status_code=303)
+
+@router.post("/testcase/{case_id}/steps/bulk-delete")
+async def bulk_delete_test_steps(
+    case_id: int,
+    request: Request,
+    step_ids: List[int] = Form(...),
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """Delete multiple test steps at once and re-index step numbers."""
+    test_case = await get_user_testcase_or_404(db, case_id, current_user.id, eager_load_steps=True)
+    
+    if not step_ids:
+        res = templates.TemplateResponse("partials/step_list.html", {"request": request, "case": test_case})
+        return trigger_toast(res, "Pilih minimal satu langkah untuk dihapus.", "error")
+
+    # 1. delete selected steps from the database
+    delete_query = select(TestStep).where(TestStep.id.in_(step_ids), TestStep.test_case_id == case_id)
+    steps_to_del = (await db.execute(delete_query)).scalars().all()
+    deleted_count = len(steps_to_del)
+
+    for step_obj in steps_to_del:
+        await db.delete(step_obj)
+    await db.commit()
+
+    # 2. Reorder remaining steps to maintain sequential step_order
+    remaining_query = (
+        select(TestStep)
+        .where(TestStep.test_case_id == case_id)
+        .order_by(TestStep.step_order.asc(), TestStep.id.asc())
+    )
+    remaining_steps = (await db.execute(remaining_query)).scalars().all()
+
+    for idx, step_obj in enumerate(remaining_steps, start=1):
+        step_obj.step_order = idx
+    await db.commit()
+
+    # 3. Refresh the test_case object to reflect updated steps
+    await db.refresh(test_case, attribute_names=['steps'])
+
+    res = templates.TemplateResponse("partials/step_list.html", {"request": request, "case": test_case})
+    return trigger_toast(res, f"Berhasil menghapus {deleted_count} langkah!")
 
 
 # ==========================================
@@ -594,19 +739,49 @@ async def search_test_cases(request: Request, q: str = "", current_case_id: Opti
 
 
 @router.post("/testcase/{case_id}/step")
-async def add_test_step(case_id: int, request: Request, command: str = Form(...), target_selector: Optional[str] = Form(None), input_value: Optional[str] = Form(None), input_value_select: Optional[str] = Form(None), db: AsyncSession = Depends(get_db), current_user: User = Depends(get_current_user)):
+async def add_test_step(
+    case_id: int, 
+    request: Request, 
+    command: str = Form(...), 
+    target_selector: Optional[str] = Form(None), 
+    input_value: Optional[str] = Form(None), 
+    input_value_select: Optional[str] = Form(None),
+    target_step_order: Optional[str] = Form(None),  # 🟢 Parameter nomor urutan posisi langkah
+    db: AsyncSession = Depends(get_db), 
+    current_user: User = Depends(get_current_user)
+):
     test_case = await get_user_testcase_or_404(db, case_id, current_user.id, eager_load_steps=True)
     
-    existing_steps = test_case.steps
+    # 🟢 1. Ambil langkah-langkah yang ada dan urutkan
+    existing_steps = sorted(test_case.steps, key=lambda s: s.step_order) if test_case.steps else []
+    total_steps = len(existing_steps)
+
+    parsed_order = int(target_step_order.strip()) if (target_step_order and target_step_order.strip().isdigit()) else None
+
+    # 🟢 2. Logika pergeseran urutan jika disisipkan di posisi tertentu
+    if parsed_order and 1 <= parsed_order <= total_steps:
+        for s in existing_steps:
+            if s.step_order >= parsed_order:
+                s.step_order += 1
+        new_step_order = parsed_order
+    else:
+        new_step_order = total_steps + 1
+
     final_input = input_value_select if (command == "INCLUDE_SCENARIO" and input_value_select) else input_value
-    new_step = TestStep(test_case_id=case_id, step_order=len(existing_steps) + 1, command=command, target_selector=target_selector.strip() if (target_selector and target_selector.strip()) else None, input_value=final_input.strip() if (final_input and final_input.strip()) else None)
+    new_step = TestStep(
+        test_case_id=case_id, 
+        step_order=new_step_order, 
+        command=command, 
+        target_selector=target_selector.strip() if (target_selector and target_selector.strip()) else None, 
+        input_value=final_input.strip() if (final_input and final_input.strip()) else None
+    )
     
     db.add(new_step)
     await db.commit()
-    await db.refresh(test_case)
+    await db.refresh(test_case, attribute_names=['steps'])
 
     res = templates.TemplateResponse("partials/step_list.html", {"request": request, "case": test_case})
-    return trigger_toast(res, "Langkah instruksi berhasil ditambahkan!")
+    return trigger_toast(res, f"Langkah instruksi berhasil ditambahkan di posisi #{new_step_order}!")
 
 
 @router.post("/testcase/{case_id}/step/{step_id}/edit")
@@ -685,90 +860,198 @@ async def move_step_order(
 async def run_test(
     case_id: int, 
     request: Request, 
-    background_tasks: BackgroundTasks, 
     record_video: Optional[str] = Form(None), 
     db: AsyncSession = Depends(get_db), 
     current_user: User = Depends(get_current_user)
 ):
+    """Jalankan tes secara langsung tanpa polling dan kembalikan hasil akhirnya."""
     await get_user_testcase_or_404(db, case_id, current_user.id)
-    
-    # 🛠️ PERBAIKAN AUTO-CLEANUP: Ekstrak nama file asli dari URL /stream-video/
-    temp_runs_query = select(TestRun).join(TestCase).join(Project).where(
-        TestRun.video_url.like("%temp_%"), 
-        Project.user_id == current_user.id
+
+    # 1. Bersihkan video temp lama milik user ini
+    temp_runs_query = (
+        select(TestRun)
+        .join(TestCase)
+        .join(Project)
+        .where(TestRun.video_url.like("%temp_%"), Project.user_id == current_user.id)
     )
     unkept_runs = (await db.execute(temp_runs_query)).scalars().all()
-    
+    user_video_dir = os.path.join("static", "videos", f"user_{current_user.id}")
     for old_run in unkept_runs:
         if old_run.video_url:
-            # Ambil nama file asli (misal: temp_RUN-123.mp4)
             filename = old_run.video_url.split("/")[-1]
-            filepath = os.path.join("static", "videos", filename)
-            
-            # Hapus file fisik jika ada di disk
+            filepath = os.path.join(user_video_dir, filename)
             if os.path.exists(filepath):
-                try: 
-                    os.remove(filepath)
-                except Exception as e: 
-                    print(f"[Auto-Cleanup Warning] Gagal menghapus {filepath}: {e}")
-            
+                try: os.remove(filepath)
+                except Exception: pass
             old_run.video_url = None
-            
     await db.commit()
 
     should_record = True if (record_video and record_video.lower() in ["true", "on", "1"]) else False
-
     run_id = f"RUN-{str(uuid.uuid4())[:8].upper()}"
+
+    # 2. Buat entri TestRun awal
     new_run = TestRun(id=run_id, test_case_id=case_id, status="PENDING")
     db.add(new_run)
     await db.commit()
 
-    background_tasks.add_task(run_test_scenario, run_id, case_id, should_record)
-    return templates.TemplateResponse("partials/status.html", {"request": request, "run": new_run})
+    # 3. 🟢 LANGSUNG TUNGGU (AWAIT) PLAYWRIGHT SELESAI (Tanpa BackgroundTasks)
+    await _async_run_test_scenario(
+        run_id=run_id, 
+        case_id=case_id, 
+        record_video=should_record, 
+        user_id=current_user.id
+    )
+
+    # 4. Ambil hasil akhir dari database
+    result_run = await db.execute(select(TestRun).where(TestRun.id == run_id))
+    completed_run = result_run.scalar_one()
+
+    # 5. Langsung kembalikan tampilan hasil akhir ke UI
+    return templates.TemplateResponse("partials/status.html", {
+        "request": request, 
+        "run": completed_run
+    })
+
+
+@router.get("/stream-video/{user_id}/{filename}")
+async def stream_video(
+    user_id: int, 
+    filename: str, 
+    request: Request,
+    current_user: User = Depends(get_current_user)
+):
+    """Stream user-isolated video file with Byte-Range HTTP 206 support."""
+    # 🟢 Prevent cross-user unauthorized video playback
+    if current_user.id != user_id:
+        raise HTTPException(status_code=403, detail="Access denied to this media file.")
+
+    video_path = os.path.join("static", "videos", f"user_{user_id}", filename)
+    if not os.path.exists(video_path):
+        raise HTTPException(status_code=404, detail="Video file not found.")
+
+    file_size = os.path.getsize(video_path)
+    range_header = request.headers.get("range")
+
+    if range_header:
+        bytes_type, bytes_range = range_header.split("=")
+        start_str, end_str = bytes_range.split("-")
+        
+        start = int(start_str) if start_str else 0
+        end = int(end_str) if end_str else file_size - 1
+        end = min(end, file_size - 1)
+        chunk_size = (end - start) + 1
+
+        def video_chunk_generator():
+            with open(video_path, "rb") as video_file:
+                video_file.seek(start)
+                yield video_file.read(chunk_size)
+
+        headers = {
+            "Content-Range": f"bytes {start}-{end}/{file_size}",
+            "Accept-Ranges": "bytes",
+            "Content-Length": str(chunk_size),
+            "Content-Type": "video/mp4",
+        }
+        return StreamingResponse(video_chunk_generator(), status_code=206, headers=headers)
+
+    return FileResponse(video_path, media_type="video/mp4")
 
 @router.get("/run-status/{run_id}")
-async def get_run_status(run_id: str, request: Request, db: AsyncSession = Depends(get_db), current_user: User = Depends(get_current_user)):
-    run_query = select(TestRun).join(TestCase).join(Project).where(TestRun.id == run_id, Project.user_id == current_user.id)
+async def get_run_status(
+    run_id: str, 
+    request: Request, 
+    db: AsyncSession = Depends(get_db), 
+    current_user: User = Depends(get_current_user)
+):
+    """Fetch run execution status with optimized OOB Swap table update upon completion."""
+    run_query = (
+        select(TestRun)
+        .join(TestCase)
+        .join(Project)
+        .where(TestRun.id == run_id, Project.user_id == current_user.id)
+    )
     test_run = (await db.execute(run_query)).scalar_one_or_none()
-    if not test_run: raise HTTPException(status_code=404)
-    return templates.TemplateResponse("partials/status.html", {"request": request, "run": test_run})
+    
+    if not test_run: 
+        raise HTTPException(status_code=404, detail="Run status not found.")
+
+    status_html = templates.get_template("partials/status.html").render({"request": request, "run": test_run})
+
+    # 🟢 OPTIMIZED: Update table only when finished, loading ONLY recent runs
+    if test_run.status in ["SUCCESS", "FAILED"]:
+        # Subquery or query optimization: eager load runs with limit/sorting
+        updated_query = (
+            select(TestCase)
+            .join(Project)
+            .where(Project.user_id == current_user.id)
+            .options(
+                selectinload(TestCase.project), 
+                selectinload(TestCase.steps),
+                # ⚡ Load only necessary runs data without pulling massive history
+                selectinload(TestCase.runs)
+            )
+            .order_by(TestCase.id.desc())
+        )
+        test_cases = (await db.execute(updated_query)).scalars().all()
+
+        table_html = templates.get_template("partials/scenario_table.html").render({
+            "request": request, 
+            "test_cases": test_cases
+        })
+
+        oob_table_html = f'<div id="scenario-table-container" hx-swap-oob="true">{table_html}</div>'
+        return HTMLResponse(status_html + oob_table_html)
+
+    return HTMLResponse(status_html)
 
 
 @router.post("/testrun/{run_id}/keep-video")
-async def keep_test_run_video(run_id: str, db: AsyncSession = Depends(get_db), current_user: User = Depends(get_current_user)):
+async def keep_test_run_video(
+    run_id: str, 
+    db: AsyncSession = Depends(get_db), 
+    current_user: User = Depends(get_current_user)
+):
     run_query = select(TestRun).join(TestCase).join(Project).where(TestRun.id == run_id, Project.user_id == current_user.id)
     run = (await db.execute(run_query)).scalar_one_or_none()
     
     if run and run.video_url and "temp_" in run.video_url:
-        filename = run.video_url.split("/")[-1]
-        permanent_filename = filename.replace("temp_", "")
+        permanent_url = run.video_url.replace("temp_", "")
+        old_filename = run.video_url.split("/")[-1]
+        new_filename = permanent_url.split("/")[-1]
         
-        old_path = os.path.join("static", "videos", filename)
-        new_path = os.path.join("static", "videos", permanent_filename)
-        
+        user_video_dir = os.path.join("static", "videos", f"user_{current_user.id}")
+        old_path = os.path.join(user_video_dir, old_filename)
+        new_path = os.path.join(user_video_dir, new_filename)
+
         if os.path.exists(old_path):
             os.rename(old_path, new_path)
-            run.video_url = f"/stream-video/{permanent_filename}"
+            run.video_url = permanent_url
             await db.commit()
             
-    return HTMLResponse('<div class="p-2.5 bg-emerald-50 text-emerald-700 text-xs font-bold rounded-xl border border-emerald-200">✅ Video berhasil disimpan permanen untuk laporan.</div>')
+    return HTMLResponse('<div class="p-2.5 bg-emerald-50 text-emerald-700 text-xs font-bold rounded-xl border border-emerald-200">✅ Video permanently saved.</div>')
 
 
 @router.delete("/testrun/{run_id}/delete-video")
-async def delete_test_run_video(run_id: str, db: AsyncSession = Depends(get_db), current_user: User = Depends(get_current_user)):
+async def delete_test_run_video(
+    run_id: str, 
+    db: AsyncSession = Depends(get_db), 
+    current_user: User = Depends(get_current_user)
+):
     run_query = select(TestRun).join(TestCase).join(Project).where(TestRun.id == run_id, Project.user_id == current_user.id)
     run = (await db.execute(run_query)).scalar_one_or_none()
     
     if run and run.video_url:
         filename = run.video_url.split("/")[-1]
-        filepath = os.path.join("static", "videos", filename)
+        filepath = os.path.join("static", "videos", f"user_{current_user.id}", filename)
         if os.path.exists(filepath):
-            try: os.remove(filepath)
-            except Exception: pass
+            try: 
+                os.remove(filepath)
+            except Exception: 
+                pass
         run.video_url = None
         await db.commit()
         
-    return HTMLResponse('<div class="p-2.5 bg-slate-100 text-slate-500 text-xs italic rounded-xl border border-slate-200">🗑️ Video telah dihapus dari server.</div>')
+    return HTMLResponse('<div class="p-2.5 bg-slate-100 text-slate-500 text-xs italic rounded-xl border border-slate-200">🗑️ Video deleted from server.</div>')
 
 
 @router.get("/testrun/{run_id}/download-video")
